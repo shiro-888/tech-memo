@@ -1,6 +1,7 @@
 # --- secrets / credentials ---
 .env
 .env.*
+!.env.example   # テンプレートはコミット可能にする
 *.pem
 *.key
 *.p12
