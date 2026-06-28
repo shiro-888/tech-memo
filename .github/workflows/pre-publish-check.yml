@@ -1,0 +1,32 @@
+name: Pre-publish Checks
+
+# main 向けの PR で公開前ガードレールを自動実行する。
+# このジョブ名 (guardrails) はフェーズ4のブランチ保護で必須チェックに指定する。
+on:
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # gitleaks が PR の差分（コミット範囲）を走査できるよう全履歴を取得する
+          fetch-depth: 0
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Link check (lychee)
+        uses: lycheeverse/lychee-action@v2
+        with:
+          # 公開対象の HTML 内リンク切れを検出する
+          args: --no-progress './**/*.html'
+          fail: true
