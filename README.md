@@ -17,6 +17,7 @@ pre-commit run --all-files  # 初回: 全ファイルに対して手動実行
 
 素の静的 HTML / CSS で構成しています。ディレクトリ構成と新しいノートの
 追加手順、公開前の必須チェックは [AGENTS.md](./AGENTS.md) を参照してください。
+公開前には [PUBLISHING_CHECKLIST.md](./PUBLISHING_CHECKLIST.md) を毎回確認します。
 
 ## ガードレール構成
 
