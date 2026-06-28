@@ -44,6 +44,13 @@
 5. `index.html` の `.note-list` に新しい `<li>`（リンクと `<time>`）を追加する。
 6. コミットして PR を作成する（`main` への直接 push は避け、PR 経由で公開する）。
 
+### Claude Code コマンドでの自動化
+
+上記の流れは Claude Code のスラッシュコマンドにまとめてある（`.claude/commands/`）。
+
+- `/draft <トピック>` … トピックから下書き（`notes/_drafts/<slug>.html`）を起こし、下書きPRを作る（未公開）。
+- `/publish <slug>` … 下書きを `notes/<公開日-slug>/index.html` へ移動し、トップにリンクして公開PRを作る。
+
 ## スタイル / 実装方針
 
 - ビルドツールは使わない素の静的 HTML / CSS。依存を増やさない。
