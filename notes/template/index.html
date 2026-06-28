@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- TODO: タイトルを記事名に差し替える -->
+  <title>記事タイトル — tech-memo</title>
+  <!-- TODO: 100文字程度の説明に差し替える -->
+  <meta name="description" content="この記事の概要。">
+  <!-- ルートから2階層下にある前提でCSSを参照（notes/<slug>/index.html） -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <!-- TODO: 見出しを記事名に差し替える -->
+      <h1>記事タイトル</h1>
+      <!-- TODO: 公開日を差し替える（datetime と表示テキストの両方） -->
+      <p class="note-meta"><time datetime="2026-01-01">2026-01-01</time></p>
+
+      <p>ここから本文を書く。</p>
+
+      <h2>セクション見出し</h2>
+      <p>段落。コードは <code>inline code</code> のように書ける。</p>
+
+      <pre><code>// コードブロックの例
+console.log("hello");
+</code></pre>
+
+      <blockquote>
+        引用は出典を明記し、15語以内に収める（AGENTS.md の公開前チェック参照）。
+      </blockquote>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
