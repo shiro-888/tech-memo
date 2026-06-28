@@ -1,0 +1,16 @@
+# 公開前ガードレール: シークレット検出と大容量ファイル混入防止
+# 導入: pip install pre-commit && pre-commit install
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: detect-private-key          # 秘密鍵ブロックの混入を検出
+      - id: check-added-large-files     # 大容量ファイル(画像内データ等)を防止
+        args: ["--maxkb=500"]
+      - id: end-of-file-fixer           # （任意）末尾改行の整形
+      - id: trailing-whitespace         # （任意）行末空白の除去

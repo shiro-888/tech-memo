@@ -1,0 +1,20 @@
+# --- secrets / credentials ---
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+secrets/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- build / tmp ---
+node_modules/
+dist/
+*.log

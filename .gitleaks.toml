@@ -1,0 +1,13 @@
+# gitleaks 設定: デフォルトルールを継承しつつ、誤検知を許可リスト化する
+[extend]
+useDefault = true
+
+# 誤検知の許可リストが必要になったら以下のコメントを外して使う
+# [allowlist]
+# description = "Allowlisted false positives"
+# regexes = [
+#   '''AKIAIOSFODNN7EXAMPLE''',
+# ]
+# paths = [
+#   '''README\.md''',
+# ]
