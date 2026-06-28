@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>このサイトの作り方 — ガードレールを土台にした技術ノートサイト — tech-memo</title>
+  <meta name="description" content="技術ノートサイトをガードレール（誤公開防止の仕組み）から先に作った記録。pre-commit・gitleaks・CI・ブランチ保護を初心者向けに周辺知識つきで解説する。">
+  <!-- CSSはルートから2階層下を参照（notes/<slug>/index.html） -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>このサイトの作り方 — ガードレールを土台にした技術ノートサイト</h1>
+      <p class="note-meta"><time datetime="2026-06-28">2026-06-28</time></p>
+
+      <p>
+        このサイト（tech-memo）は、技術的に学んだことを書き留めて公開するための
+        小さな静的サイトです。記念すべき最初のノートとして、このサイト自体を
+        「どう作ったか」、とくに<strong>誤って機密情報を公開しないための仕組み
+        （ガードレール）</strong>をどう組んだかを解説します。
+      </p>
+      <p>
+        これからリポジトリを公開してみたい初心者エンジニアの方にも分かるよう、
+        途中で必要な周辺知識を補足しながら進めます。
+      </p>
+
+      <h2>そもそも何を作ったのか</h2>
+      <p>
+        作ったのは<strong>静的サイト</strong>です。静的サイトとは、サーバ側で
+        プログラムを動かさず、あらかじめ用意した HTML / CSS ファイルを
+        そのまま配信するだけのサイトのこと。データベースもサーバ言語も不要で、
+        構成がシンプルなため、個人の技術メモ置き場には十分です。
+      </p>
+      <p>構成はおおよそ次のとおりです。</p>
+      <pre><code>.
+├── index.html              # トップページ（ノート一覧）
+├── styles/site.css         # 共通スタイル
+├── notes/
+│   ├── template/index.html # 新規ノートのひな形
+│   ├── _drafts/            # 未完成の下書き置き場
+│   └── &lt;公開日-スラッグ&gt;/    # 公開済みノート（この記事もここ）
+├── AGENTS.md               # 作業ルール（人にもAIにも適用）
+└── PUBLISHING_CHECKLIST.md # 公開前チェックリスト</code></pre>
+
+      <h2>設計の核心：「ガードレールを先に作る」</h2>
+      <p>
+        このプロジェクトで最初に決めたのは、<strong>記事を書き始める前に、
+        まずガードレール（安全装置）を作る</strong>という順番でした。
+      </p>
+      <blockquote>
+        ガードレール＝「うっかり機密情報を公開してしまう」「未完成の記事が
+        公開される」といった事故を、人の注意力に頼らず仕組みで防ぐ仕掛け。
+      </blockquote>
+      <p>
+        なぜ順番が大事かというと、<strong>Git の履歴は消しにくい</strong>からです。
+        ここでいう「シークレット（secret）」とは、パスワード・API キー・秘密鍵など、
+        外部に漏れてはいけない文字列のこと。これらをうっかりコミットすると、
+        たとえ次のコミットで消しても<strong>過去の履歴には残り続けます</strong>。
+        公開リポジトリなら、その一瞬で世界中から見られた可能性があります。
+        だからこそ「最初の1コミット目から」防御が効いている状態にしたい——
+        これがガードレール先行の理由です。
+      </p>
+
+      <h2>多層防御：5つの層で守る</h2>
+      <p>
+        一つの仕組みに頼ると、それが破られたら終わりです。そこで、性質の違う
+        防御を<strong>重ねて</strong>配置しました（多層防御）。
+      </p>
+
+      <h3>層1：.gitignore — そもそも追跡しない</h3>
+      <p>
+        <code>.gitignore</code> は「Git に追跡させないファイル」を指定する
+        設定ファイルです。<code>.env</code>（環境変数ファイル）や
+        <code>*.key</code>（鍵ファイル）などをここに書いておけば、
+        そもそも <code>git add</code> の対象から外れ、事故の母数を減らせます。
+      </p>
+
+      <h3>層2：pre-commit + gitleaks — コミット前の自動チェック</h3>
+      <p>
+        次は手元（ローカル）での防御です。Git には「フック（hook）」という、
+        特定のタイミングで自動的にスクリプトを走らせる仕組みがあります。
+        その一つ <strong>pre-commit フック</strong>は、<code>git commit</code>
+        の直前に実行されます。
+      </p>
+      <p>
+        この仕組みを手軽に扱うツールが <strong>pre-commit</strong>
+        （同名のフレームワーク）で、設定ファイルにチェック項目を並べるだけで
+        コミット前検査を自動化できます。そこに、シークレット検出ツール
+        <strong>gitleaks</strong> を組み込みました。
+      </p>
+      <pre><code># .pre-commit-config.yaml（抜粋）
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks            # 鍵やトークンらしき文字列を検出
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: detect-private-key  # 秘密鍵の混入を検出
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]  # 大きすぎるファイルを防ぐ</code></pre>
+      <p>
+        導入は <code>pip install pre-commit</code> のあと
+        <code>pre-commit install</code> を一度実行するだけ。以降は
+        コミットのたびに自動で検査が走り、シークレットらしき文字列があれば
+        コミットが中断されます。これが<strong>一次防御</strong>です。
+      </p>
+
+      <h3>層3：GitHub の Secret scanning / Push protection — サーバ側の網</h3>
+      <p>
+        ローカルの防御は、各自が <code>pre-commit install</code> を
+        忘れると効きません。そこで GitHub 側にも網を張ります。
+        <strong>Secret scanning</strong> は、リポジトリ内に既知の形式の
+        シークレットがないかを GitHub が走査する機能。
+        <strong>Push protection</strong> は、シークレットを含む push を
+        その場でブロックする機能です。これらは管理画面（Settings）で
+        有効化します。
+      </p>
+
+      <h3>層4：CI — PR のたびに自動検査する</h3>
+      <p>
+        <strong>CI（継続的インテグレーション）</strong>とは、コードの変更を
+        取り込むたびに、自動でテストや検査を走らせる仕組みのこと。GitHub では
+        <strong>GitHub Actions</strong> を使い、リポジトリ内の YAML ファイルに
+        手順を書くと実現できます。
+      </p>
+      <p>
+        ここでは <code>guardrails</code> という名前のジョブを作り、Pull Request
+        （後述）のたびに2つの検査を回しています。
+      </p>
+      <ul>
+        <li><strong>gitleaks</strong>：層2と同じシークレット検出を、今度は
+          サーバ上で。手元で検査を忘れても、ここで止まります。</li>
+        <li><strong>lychee</strong>：HTML 内のリンク切れ（存在しない URL への
+          リンク）を検出するツール。公開物の品質を守ります。</li>
+      </ul>
+      <pre><code># .github/workflows/pre-publish-check.yml（抜粋）
+on:
+  pull_request:
+    branches: ["main"]
+jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@... # SHA固定（後述）
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@...
+      - uses: lycheeverse/lychee-action@...
+        with:
+          args: --no-progress './**/*.html'</code></pre>
+
+      <h3>層5：ブランチ保護 — main を直接触らせない</h3>
+      <p>
+        最後の層は運用ルールです。まず用語を整理します。
+      </p>
+      <ul>
+        <li><strong>ブランチ</strong>：変更を枝分かれさせて作業する単位。
+          公開される本番の枝が <code>main</code>。</li>
+        <li><strong>Pull Request（PR）</strong>：ある枝の変更を <code>main</code>
+          に取り込む前に、差分を見せて確認・検査するための仕組み。</li>
+      </ul>
+      <p>
+        GitHub の<strong>ブランチ保護（ルールセット）</strong>で、
+        <code>main</code> への直接の書き込みを禁止し、「PR を経由すること」
+        「<code>guardrails</code> チェックに通ること」を必須にしました。
+        こうすると、層4の検査を<strong>必ず</strong>通らないと公開できません。
+      </p>
+      <blockquote>
+        一人で運用していても、PR を挟むこと自体が「自分のコミットをもう一度
+        見直す冷却期間」になり、誤公開対策として有効に働きます。
+      </blockquote>
+
+      <h2>もう一歩の堅牢化：アクションの SHA 固定と Dependabot</h2>
+      <p>
+        層4で使った <code>actions/checkout</code> などは、他人が作って公開した
+        部品（GitHub Action）です。便利な反面、その部品が乗っ取られて悪意ある
+        コードに差し替えられると、こちらの CI も汚染されます。これを
+        <strong>サプライチェーン攻撃</strong>と呼びます。
+      </p>
+      <p>
+        対策として、各アクションを <code>@v4</code> のような「動くタグ」では
+        なく、特定の<strong>コミット SHA</strong>（中身が変わらない固定の識別子）
+        で参照するようにしました。
+      </p>
+      <pre><code>uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1</code></pre>
+      <p>
+        ただし固定したままだと、セキュリティ修正にも追従できません。そこで
+        <strong>Dependabot</strong>（依存関係の更新を自動で提案してくれる
+        GitHub の機能）を有効にし、固定 SHA と版数コメントを定期的に
+        更新してもらう運用にしています。「固定」と「鮮度」を両立させる構えです。
+      </p>
+
+      <h2>日々の執筆〜公開のワークフロー</h2>
+      <p>記事を1本公開するまでの流れはこうです。</p>
+      <ol>
+        <li>ひな形 <code>notes/template/index.html</code> を元に、下書きを
+          <code>notes/_drafts/&lt;slug&gt;.html</code> に作る。
+          <code>_drafts/</code> はトップからリンクしないので未公開のまま。</li>
+        <li>書き終えたら <code>PUBLISHING_CHECKLIST.md</code>（公開前
+          チェックリスト）で、個人情報・社内情報が無いか等を確認する。</li>
+        <li>記事を <code>notes/&lt;公開日-スラッグ&gt;/index.html</code> へ移動し、
+          トップページのノート一覧にリンクを追加する。</li>
+        <li>PR を出し、<code>guardrails</code> チェックが緑になったらマージ＝公開。</li>
+      </ol>
+      <p>
+        ちなみに、下書きも公開記事もテンプレートも「ルートから2階層下」に
+        そろえてあるので、CSS への相対パス（<code>../../styles/site.css</code>）は
+        移動しても変わりません。地味ですが、こうした小さな一貫性が事故を減らします。
+      </p>
+
+      <h2>まとめ</h2>
+      <p>
+        この記事では、技術ノートサイトを「ガードレールから先に」作った流れを
+        紹介しました。ポイントは、防御を<strong>人の注意力ではなく仕組みに
+        肩代わりさせる</strong>こと、そして<strong>性質の違う防御を重ねる</strong>
+        ことです。最初に土台を作っておけば、安心して中身（記事）の執筆に
+        集中できます。同じように個人サイトを始めたい方の参考になれば幸いです。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://github.com/pre-commit/pre-commit">pre-commit（コミット前チェックのフレームワーク）</a></li>
+        <li><a href="https://github.com/gitleaks/gitleaks">gitleaks（シークレット検出ツール）</a></li>
+        <li><a href="https://github.com/lycheeverse/lychee">lychee（リンク切れチェッカー）</a></li>
+        <li><a href="https://github.com/actions/checkout">actions/checkout（GitHub Action）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
