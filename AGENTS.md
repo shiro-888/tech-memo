@@ -25,6 +25,7 @@
 │   ├── template/
 │   │   └── index.html      # 新規ノートのテンプレート
 │   ├── _drafts/            # 未完成の下書き（index.html からリンクしない）
+│   │   └── <slug>.html     # 下書きは <slug>.html を直置き（2 階層下）
 │   └── <公開日-スラッグ>/    # 公開済みノート（例: 2026-06-28-foo/）
 │       └── index.html
 ├── AGENTS.md               # このファイル
@@ -36,16 +37,17 @@
 
 ## 新しいノートを追加する手順
 
-1. `notes/_drafts/<slug>/index.html` を `notes/template/index.html` を元に作成する。
+1. `notes/_drafts/<slug>.html` を `notes/template/index.html` を元に作成する。
 2. 執筆中はここに置き、`index.html` からはリンクしない。
 3. 上記「公開前の必須チェック」をすべて確認する。
-4. 完成したらディレクトリを `notes/<公開日-スラッグ>/`（例: `notes/2026-06-28-slug/`）へ移動する。
+4. 完成したら `notes/<公開日-スラッグ>/index.html`（例: `notes/2026-06-28-slug/index.html`）へ移動する。下書き・公開とも 2 階層下なので相対パス（`../../`）の修正は不要。
 5. `index.html` の `.note-list` に新しい `<li>`（リンクと `<time>`）を追加する。
 6. コミットして PR を作成する（`main` への直接 push は避け、PR 経由で公開する）。
 
 ## スタイル / 実装方針
 
 - ビルドツールは使わない素の静的 HTML / CSS。依存を増やさない。
-- ノートページは `notes/<slug>/index.html` の 2 階層下に置くため、
-  CSS は `../../styles/site.css` を参照する。
+- テンプレート・下書き（`notes/_drafts/<slug>.html`）・公開ノート
+  （`notes/<slug>/index.html`）はいずれもルートから 2 階層下にあるため、
+  CSS は一貫して `../../styles/site.css` を参照する（移動時のパス修正は不要）。
 - 日本語で記述する。`<html lang="ja">` を維持する。
