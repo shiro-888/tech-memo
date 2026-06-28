@@ -11,6 +11,6 @@ repos:
     hooks:
       - id: detect-private-key          # 秘密鍵ブロックの混入を検出
       - id: check-added-large-files     # 大容量ファイル(画像内データ等)を防止
-        args: ["--maxkb=500"]
+        args: ["--maxkb=1024"]         # スクリーンショット等を見越して1MBに緩和
       - id: end-of-file-fixer           # （任意）末尾改行の整形
       - id: trailing-whitespace         # （任意）行末空白の除去
