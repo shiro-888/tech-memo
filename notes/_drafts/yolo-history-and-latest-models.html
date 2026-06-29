@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>画像認識における YOLO の歴史と最新モデル — 一段階検出器のすすみ方 — tech-memo</title>
+  <meta name="description" content="物体検出の代表格 YOLO を、二段階検出器との違いから世代ごとの進化（v1〜v12）、YOLO-NAS・YOLO-World、mAP と速度のトレードオフまで初心者向けに整理した技術ノート。">
+  <!-- CSSはルートから2階層下を参照（notes/_drafts/<slug>.html） -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>画像認識における YOLO の歴史と最新モデル — 一段階検出器のすすみ方</h1>
+      <p class="note-meta"><time datetime="2026-06-28">2026-06-28</time></p>
+
+      <p>
+        画像から「何が・どこに」写っているかを当てる<strong>物体検出</strong>の
+        世界で、長年にわたり主役を張り続けているのが <strong>YOLO</strong>
+        （ヨロ、You Only Look Once）です。このノートでは、YOLO がなぜ画期的だった
+        のかを<strong>二段階検出器との違い</strong>から説き起こし、v1 から最新世代
+        までの歴史、そして派生モデルの動向までを整理します。
+      </p>
+      <p>
+        これから物体検出を学びたい初心者の方にも分かるよう、途中で必要な
+        周辺知識（評価指標など）を補足しながら進めます。なお、ごく新しい世代に
+        ついては情報が流動的なため、確実性が高い事実を中心に述べ、細部は
+        <strong>断定を避けて</strong>記述しています（最終確認は各公式情報で
+        行ってください）。
+      </p>
+
+      <h2>そもそも「物体検出」とは</h2>
+      <p>
+        画像を扱う AI のタスクは、よく次の3つに分けて説明されます。
+      </p>
+      <ul>
+        <li><strong>画像分類（Classification）</strong>：画像全体が「猫」か「犬」か、
+          1つのラベルを当てる。位置は問わない。</li>
+        <li><strong>物体検出（Object Detection）</strong>：画像の中の各物体について、
+          <strong>位置（枠）と種類（ラベル）</strong>の両方を当てる。</li>
+        <li><strong>セグメンテーション（Segmentation）</strong>：物体を
+          ピクセル単位で塗り分ける、より細かいタスク。</li>
+      </ul>
+      <p>
+        YOLO が扱うのは真ん中の物体検出です。検出結果は通常、
+        <strong>バウンディングボックス</strong>（対象を囲む長方形＝bbox）と、
+        その<strong>クラス（種類）</strong>、および
+        <strong>信頼度スコア</strong>（その予測がどれくらい確からしいか）の
+        組み合わせで表されます。
+      </p>
+
+      <h2>一段階検出器 vs 二段階検出器</h2>
+      <p>
+        YOLO の特徴を理解するには、それ以前に主流だった「二段階」の考え方と
+        対比するのが近道です。
+      </p>
+
+      <h3>二段階検出器（R-CNN 系）の仕組みと弱点</h3>
+      <p>
+        二段階検出器は、その名のとおり処理を2段構えで行います。代表が
+        <strong>R-CNN</strong> とその改良版（Fast R-CNN、Faster R-CNN）です。
+      </p>
+      <ol>
+        <li><strong>領域候補の抽出</strong>：物体がありそうな場所（候補領域）を
+          まず多数挙げる。</li>
+        <li><strong>分類と枠の調整</strong>：各候補について「何か／どの種類か」を
+          判定し、枠を微調整する。</li>
+      </ol>
+      <p>
+        この方式は精度が高い一方、候補を出してから一つずつ調べるため
+        <strong>計算が重く、速度が出にくい</strong>という弱点がありました。
+        動画やリアルタイム用途では、この遅さが課題になります。
+      </p>
+
+      <h3>一段階検出器という発想（YOLO の核心）</h3>
+      <p>
+        YOLO は発想を変えました。「候補を出してから調べる」のではなく、
+        画像を<strong>一度ネットワークに通すだけ</strong>で、枠の位置と
+        クラスを<strong>同時にまとめて予測</strong>します。これが
+        「You Only Look Once（一度見るだけ）」という名前の由来です。
+      </p>
+      <blockquote>
+        検出を「領域候補→分類」の2段階ではなく、画像から枠と確率を直接
+        求める1つの回帰問題として解く——これが YOLO の出発点です。
+      </blockquote>
+      <p>
+        こうして処理を1段階にまとめたことで、YOLO は精度を保ちつつ
+        <strong>大幅な高速化</strong>を実現し、リアルタイム物体検出の
+        定番へと成長していきます。このように1回の推論で検出するモデルを
+        <strong>一段階検出器（one-stage detector）</strong>と呼びます。
+      </p>
+
+      <h2>評価指標を押さえる（mAP と速度のトレードオフ）</h2>
+      <p>
+        各世代の「良さ」を比べるには、ものさし（評価指標）を知っておくと
+        便利です。物体検出では主に次の2つが使われます。
+      </p>
+      <ul>
+        <li><strong>mAP（mean Average Precision）</strong>：検出の
+          <strong>正確さ</strong>を表す代表的な指標。値が大きいほど良い。
+          予測枠と正解枠の重なり具合（<strong>IoU</strong>：Intersection over
+          Union＝重なり面積÷合併面積）が一定以上なら「当たり」とみなして
+          集計します。</li>
+        <li><strong>FPS（Frames Per Second）／推論時間</strong>：
+          <strong>速さ</strong>を表す指標。1秒あたり何枚処理できるか。
+          大きいほど高速。</li>
+      </ul>
+      <p>
+        重要なのは、<strong>精度（mAP）と速度（FPS）はトレードオフの関係に
+        なりやすい</strong>という点です。一般に、大きく重いモデルほど精度は
+        上がりやすい反面、速度は落ちます。YOLO の歴史は、ある意味
+        「この2つをいかに高い次元で両立させるか」の追求の歴史でもあります。
+      </p>
+
+      <h2>YOLO の歴史 — 世代ごとの進化</h2>
+      <p>
+        YOLO は単一のチームが一貫して開発してきたわけではなく、
+        <strong>開発の主体が世代によって移り変わっている</strong>点が
+        おもしろい特徴です。ここでは大きな流れをつかむことを優先し、
+        系統ごとにまとめます。発表年や細かな数値は情報源により表記が
+        揺れることがあるため、おおまかな時期として読んでください。
+      </p>
+
+      <h3>YOLOv1〜v3（Joseph Redmon らによる原典）</h3>
+      <p>
+        最初の YOLO（v1）は Joseph Redmon らによって提案されました
+        （2015〜2016 年ごろ）。検出を回帰問題として解く一段階方式を打ち立てた
+        記念碑的なモデルです。続く <strong>v2（YOLO9000 とも呼ばれる）</strong>
+        では、<strong>アンカーボックス</strong>（あらかじめ用意した枠のひな形）の
+        導入や Batch Normalization、高解像度での学習などで精度と使い勝手を改善。
+        <strong>v3</strong> では複数の解像度で予測する
+        <strong>マルチスケール検出</strong>と、Darknet-53 と呼ばれる
+        バックボーン（特徴抽出部）が採用され、小さな物体への強さが増しました。
+      </p>
+
+      <h3>YOLOv4・v7（Bochkovskiy・Wang・Liao らの系統）</h3>
+      <p>
+        原作者が研究から離れたのち、開発の系譜は別の研究者たちへと
+        引き継がれていきます。<strong>v4</strong>（2020 年ごろ、Alexey
+        Bochkovskiy らによる）は、当時知られていた学習・推論の工夫を
+        体系的に組み合わせ、CSPDarknet などを採り入れて速度と精度を底上げ
+        しました。同じ系統の <strong>v7</strong>（2022 年ごろ）も、学習効率と
+        精度の両立で高い評価を得たモデルとして知られています。
+      </p>
+      <p>
+        なお、番号の系譜はこの2系統だけでなく、企業から登場したものもあります。
+        たとえば <strong>v6</strong>（Meituan のグループによるとされる、2022 年ごろ）は、
+        産業用途を意識した設計のモデルとして紹介されています。
+      </p>
+
+      <h3>YOLOv5・v8（Ultralytics による実装主導）</h3>
+      <p>
+        <strong>v5</strong>（2020 年ごろ）は <strong>Ultralytics</strong> 社による
+        PyTorch ベースの実装で、導入の手軽さや使いやすさから一気に普及しました。
+        一方で、登場当初は<strong>査読付きの正式論文が確認できず</strong>、
+        「v5」という命名の妥当性をめぐって議論があった点も知られています
+        （事実関係は各自で確認してください）。
+        続く <strong>v8</strong>（2023 年ごろ）も Ultralytics によるもので、
+        <strong>アンカーフリー</strong>（アンカーボックスに頼らない）設計を採用し、
+        検出だけでなくセグメンテーション・分類・姿勢推定などを
+        1つの枠組みで扱えるようになった点が特徴とされます。
+      </p>
+
+      <h3>YOLOv9・v10（研究機関からの新提案）</h3>
+      <p>
+        2024 年ごろには、研究機関を中心に新しいアイデアが相次ぎました。
+        <strong>v9</strong> は、学習時の勾配情報をうまく扱う工夫（PGI）や
+        GELAN と呼ばれる構造が提案されたモデルとして紹介されています。
+        <strong>v10</strong>（清華大学のグループによるとされる）は、
+        後処理である <strong>NMS</strong>（Non-Maximum Suppression：重複した枠を
+        間引く処理）を学習段階で不要にする「<strong>NMS-free</strong>」な
+        エンドツーエンド推論の方向性を示した点が注目されました。
+        これらの細部や数値は情報が分かれることがあるため、概略として
+        押さえておくとよいでしょう。
+      </p>
+
+      <h3>YOLOv11（YOLO11）・YOLOv12 と最新動向</h3>
+      <p>
+        Ultralytics は 2024 年に <strong>YOLO11</strong>（v11）を公開し、
+        効率と精度のさらなる改善を図ったとされます。さらに 2025 年ごろには
+        <strong>v12</strong> 系として、<strong>アテンション（注意機構）</strong>を
+        取り入れつつリアルタイム性を保つ方向のモデルも報告されています。
+        ただし、ごく新しい世代は<strong>登場間もなく情報が流動的</strong>で、
+        命名や開発主体・性能の位置づけが今後変わる可能性もあります。
+        最新版を採用する際は、必ず公式リポジトリやドキュメントで
+        最新の事実を確認してください。
+      </p>
+
+      <h2>別系統の発展 — NAS とオープン語彙</h2>
+      <p>
+        「v1, v2, …」という番号の系譜とは別に、YOLO の名を冠した
+        特徴的な派生モデルも登場しています。
+      </p>
+
+      <h3>YOLO-NAS（アーキテクチャの自動探索）</h3>
+      <p>
+        <strong>YOLO-NAS</strong>（Deci 社によるとされる、2023 年ごろ）は、
+        <strong>NAS（Neural Architecture Search：ニューラルネットの構造を
+        自動で探索する技術）</strong>を使ってネットワーク構造を最適化した点が
+        特徴です。人手で設計するのではなく、探索アルゴリズムに良い構造を
+        見つけさせる、という発想です。
+      </p>
+
+      <h3>YOLO-World（テキストで対象を指定する検出）</h3>
+      <p>
+        <strong>YOLO-World</strong>（Tencent の研究グループによるとされる、
+        2024 年ごろ）は、<strong>オープン語彙（open-vocabulary）検出</strong>
+        を目指したモデルです。従来の YOLO は「学習済みの決まった種類」しか
+        検出できませんでしたが、YOLO-World は<strong>テキストで指定した対象</strong>
+        を、事前に専用学習しなくても検出することを狙います（いわゆる
+        ゼロショット的な検出）。検出の柔軟性を広げる方向の発展例として
+        注目されています。
+      </p>
+
+      <h2>どれを使えばいい？（用途別の考え方）</h2>
+      <p>
+        「結局どれが一番か」は用途次第で、一概には決められません。
+        選ぶときの観点を挙げます。
+      </p>
+      <ul>
+        <li><strong>速度を最優先（リアルタイム）</strong>：軽量な構成を選び、
+          mAP より FPS を重視する。</li>
+        <li><strong>精度を最優先</strong>：大きめのモデルを選び、推論時間の
+          余裕を確保する。</li>
+        <li><strong>エッジ・組込み機器</strong>：メモリ・電力の制約があるため、
+          小型モデルやモデル軽量化（量子化など）を検討する。</li>
+        <li><strong>ライセンスの確認</strong>：YOLO 系はモデルごとに
+          ライセンス条件が異なることがある。<strong>商用利用の前には
+          必ず各モデルのライセンスを確認</strong>すること。</li>
+      </ul>
+      <p>
+        多くのフレームワークでは、学習済みモデルを読み込んで数行で推論を
+        試せます。概念としては、おおむね次のような流れになります
+        （具体的な書き方は採用するライブラリの公式ドキュメントに従って
+        ください。下記は擬似コードです）。
+      </p>
+      <pre><code># 擬似コード（イメージ）：学習済みモデルで画像を検出する
+model = load_model("yolo-xxx")        # 学習済みモデルを読み込む
+results = model.predict("image.jpg")  # 画像を1回通して検出
+for box in results.boxes:             # 検出結果（枠）を取り出す
+    print(box.label, box.score, box.xyxy)  # 種類・信頼度・座標</code></pre>
+
+      <h2>まとめ</h2>
+      <p>
+        YOLO は、検出を「領域候補→分類」の二段階から
+        <strong>一段階の回帰問題</strong>へと置き換えることで、
+        リアルタイム物体検出の道を切り開きました。その後は開発主体を
+        変えながら世代を重ね、アンカーフリー化や NMS-free、アテンション導入、
+        さらには NAS による自動設計やテキスト指定のオープン語彙検出
+        （YOLO-World）へと、多方向に発展しています。
+      </p>
+      <p>
+        モデル選びの軸は、結局のところ<strong>精度（mAP）と速度（FPS）の
+        トレードオフ</strong>を、自分の用途のどこに置くか。そしてもう一つ、
+        実利用では<strong>ライセンスの確認</strong>を忘れないこと。
+        本ノートの世代の位置づけはおおまかな見取り図なので、実際に採用する際は
+        各モデルの公式情報で最新の事実を確認することをおすすめします。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://github.com/ultralytics/ultralytics">Ultralytics（YOLOv8 / YOLO11 などの公式リポジトリ）</a></li>
+        <li><a href="https://docs.ultralytics.com/">Ultralytics ドキュメント（YOLO の使い方・モデル一覧）</a></li>
+        <li><a href="https://github.com/ultralytics/yolov5">YOLOv5 公式リポジトリ</a></li>
+        <li><a href="https://github.com/AlexeyAB/darknet">Darknet / YOLOv4（AlexeyAB 版リポジトリ）</a></li>
+        <li><a href="https://arxiv.org/abs/1506.02640">論文: You Only Look Once（YOLOv1, arXiv）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
