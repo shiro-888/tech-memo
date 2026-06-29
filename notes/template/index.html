@@ -20,6 +20,26 @@
 
   <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
   <link rel="stylesheet" href="../../styles/site.css">
+
+  <!--
+    任意: シンタックスハイライト（Prism.js）を使う場合のみコメントを外す。
+    使わない記事では読み込まないことで依存ゼロを保つ。
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    使い方: <pre><code class="language-bash">...</code></pre>
+  -->
+
+  <!--
+    任意: フロー/シーケンス図などを Mermaid で書く場合のみコメントを外す。
+    インラインSVGで足りる図ならこちらは不要（依存ゼロを優先）。
+    <script type="module">
+      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+      mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    使い方: <pre class="mermaid">...</pre> に Mermaid 記法を書く。
+    記法例（矢印 = ハイフン2つと不等号）は公式ドキュメント参照。
+  -->
 </head>
 <body>
   <header class="site-header">
@@ -51,6 +71,31 @@
       <pre><code>// コードブロックの例
 console.log("hello");
 </code></pre>
+
+      <!--
+        図解の例（インラインSVG）。currentColor と var(--color-*) を使うと
+        ライト/ダークのテーマに自然に追従する。複雑な図は Mermaid を使う。
+      -->
+      <figure class="diagram">
+        <svg viewBox="0 0 420 140" role="img" aria-labelledby="ex-diagram-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="ex-diagram-title">図の概要（スクリーンリーダ向け）</title>
+          <defs>
+            <marker id="diagram-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <rect class="node"          x="20"  y="40" width="100" height="60" rx="8"/>
+          <rect class="node node--accent" x="160" y="40" width="100" height="60" rx="8"/>
+          <rect class="node"          x="300" y="40" width="100" height="60" rx="8"/>
+          <text class="label" x="70"  y="76" text-anchor="middle">入力</text>
+          <text class="label" x="210" y="76" text-anchor="middle">処理</text>
+          <text class="label" x="350" y="76" text-anchor="middle">出力</text>
+          <path class="arrow" d="M120 70 L160 70"/>
+          <path class="arrow" d="M260 70 L300 70"/>
+        </svg>
+        <figcaption>図1: 図のキャプション（不要なら削除）</figcaption>
+      </figure>
 
       <blockquote>
         引用は出典を明記し、15語以内に収める（AGENTS.md の公開前チェック参照）。
