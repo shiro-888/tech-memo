@@ -19,6 +19,12 @@ argument-hint: <トピック（書いてほしい題材）>
 3. **下書きを執筆**
    - `notes/template/index.html` を元に `notes/_drafts/<slug>.html` を作成する。
    - `<html lang="ja">` を維持。CSS は `../../styles/site.css`（ルートから2階層下）。
+   - **メタデータを必ず差し替える**:
+     - `<meta name="article:category">`: 値はトピックに合わせて
+       `web | security | tools | design | infra | ai | misc` から選ぶ（`misc` は最終手段）。
+     - `<meta name="article:summary">`: トップカードに出る紹介文。80〜120文字目安。
+     - `<meta name="article:tags">`: 任意。カンマ区切り（例: `pre-commit,gitleaks,CI`）。
+     - 記事冒頭の `.note-meta` 内の `badge badge--<category>` クラスも `article:category` と揃える。
    - **AGENTS.md の「公開前の必須チェック」を厳守**する:
      - 個人情報・勤務先固有情報・同僚名・未公開の業務情報を書かない。
      - 認証情報・APIキー・秘密鍵・`.env` の実値を書かない。
@@ -26,15 +32,20 @@ argument-hint: <トピック（書いてほしい題材）>
      - 参考 URL は**実在を確認してから**記載する（到達確認できた URL のみ。`curl -sI` 等で 200 を確認）。
      - コード例は可能な範囲で動作を確認する。
    - 初心者にも分かるよう、必要な周辺知識を補足する文体にする（既存ノートの粒度を踏襲）。
+   - **図解**: 仕組み・関係・流れの説明には積極的に図を使う。
+     - 第一選択は**インラインSVG**（`.diagram` クラス、`currentColor`・`var(--color-*)` でテーマ追従）。
+     - フロー/シーケンス図など量が多いときは Mermaid を使い、`<head>` の Mermaid CDN コメントを外す。
+     - シンタックスハイライトが必要なら Prism CDN コメントを外す。不要な記事では読み込まない。
 
 4. **表示を検証**
-   - Chromium（Playwright）で `notes/_drafts/<slug>.html` をレンダリングし、CSS 適用・リンク・コードブロック表示に崩れが無いか確認する。
+   - Chromium（Playwright）で `notes/_drafts/<slug>.html` をレンダリングし、CSS 適用・カテゴリバッジ・図・リンク・コードブロック表示に崩れが無いか確認する。
 
 5. **push して PR を作成**
    - `git add` → コミット → `git push -u origin claude/draft-<slug>`（失敗時は指数バックオフで最大4回）。
    - GitHub MCP で base `main` の PR を作成する。
    - PR 本文には次を明記:
      - これは**下書き**であり index.html には未リンク＝未公開であること。
+     - 設定したカテゴリ（`article:category`）。
      - `PUBLISHING_CHECKLIST.md` の「内容」項目のチェック状況。
      - 公開する際は `/publish <slug>` を使うこと。
 

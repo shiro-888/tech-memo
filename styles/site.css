@@ -1,14 +1,48 @@
 /* tech-memo site styles
-   シンプル・可読性重視・レスポンシブ。OSのダークモード設定に追従する。 */
+   可読性 + 軽い装飾。OSのダークモード設定に追従し、カテゴリ色で
+   情報を伝える設計。ビルドツールは使わない素のCSSのまま運用する。 */
 
 :root {
   --max-width: 720px;
+
+  /* base palette */
   --color-bg: #ffffff;
+  --color-bg-soft: #f6f8fa;
+  --color-bg-raised: #ffffff;
   --color-text: #1f2328;
   --color-muted: #656d76;
   --color-link: #0969da;
+  --color-link-hover: #0550ae;
   --color-border: #d0d7de;
+  --color-border-soft: #e7ecf0;
   --color-code-bg: #f6f8fa;
+
+  /* brand / semantic */
+  --color-accent: #6e40c9;
+  --color-accent-soft: #efe7fb;
+  --color-info: #0969da;
+  --color-success: #1a7f37;
+  --color-warning: #9a6700;
+  --color-danger: #cf222e;
+
+  /* category palette（バッジ・カード左ストライプ・図中のハイライト等で使用） */
+  --cat-web: #2da44e;
+  --cat-security: #cf222e;
+  --cat-tools: #6e40c9;
+  --cat-design: #bf8700;
+  --cat-infra: #0969da;
+  --cat-ai: #d83768;
+  --cat-misc: #6e7781;
+  --cat-on-color: #ffffff;
+
+  /* shape */
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow-card: 0 1px 2px rgba(31, 35, 40, 0.04),
+                 0 2px 8px rgba(31, 35, 40, 0.06);
+  --shadow-card-hover: 0 2px 4px rgba(31, 35, 40, 0.06),
+                      0 8px 20px rgba(31, 35, 40, 0.1);
+
   --font-sans: system-ui, -apple-system, "Segoe UI", "Hiragino Sans",
     "Noto Sans JP", Meiryo, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
@@ -18,11 +52,36 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --color-bg: #0d1117;
+    --color-bg-soft: #161b22;
+    --color-bg-raised: #161b22;
     --color-text: #e6edf3;
     --color-muted: #9198a1;
     --color-link: #4493f8;
+    --color-link-hover: #79b8ff;
     --color-border: #30363d;
+    --color-border-soft: #21262d;
     --color-code-bg: #161b22;
+
+    --color-accent: #b392f0;
+    --color-accent-soft: #2d2452;
+    --color-info: #4493f8;
+    --color-success: #3fb950;
+    --color-warning: #d29922;
+    --color-danger: #f85149;
+
+    --cat-web: #3fb950;
+    --cat-security: #f85149;
+    --cat-tools: #b392f0;
+    --cat-design: #d29922;
+    --cat-infra: #4493f8;
+    --cat-ai: #ff7eb6;
+    --cat-misc: #9198a1;
+    --cat-on-color: #0d1117;
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4),
+                   0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-card-hover: 0 2px 4px rgba(0, 0, 0, 0.5),
+                        0 8px 20px rgba(0, 0, 0, 0.4);
   }
 }
 
@@ -54,6 +113,7 @@ body {
 .site-header {
   border-bottom: 1px solid var(--color-border);
   padding: 1.5rem 0;
+  background: linear-gradient(180deg, var(--color-bg) 0%, var(--color-bg-soft) 100%);
 }
 
 .site-title {
@@ -61,6 +121,10 @@ body {
   font-weight: 700;
   text-decoration: none;
   color: var(--color-text);
+  background-image: linear-gradient(90deg, var(--color-accent), var(--color-info));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .site-tagline {
@@ -84,6 +148,7 @@ a {
 
 a:hover {
   text-decoration: underline;
+  color: var(--color-link-hover);
 }
 
 /* main */
@@ -95,33 +160,190 @@ h1, h2, h3 {
   line-height: 1.3;
 }
 
-/* note list */
+h2 {
+  border-bottom: 1px solid var(--color-border-soft);
+  padding-bottom: 0.25rem;
+  margin-top: 2.25rem;
+}
+
+/* ─────── category filter chips（トップ） ─────── */
+.category-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 1.5rem;
+}
+
+.category-filter__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  cursor: pointer;
+  text-decoration: none;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.category-filter__chip:hover {
+  background: var(--color-bg-soft);
+  text-decoration: none;
+}
+
+.category-filter__chip[aria-pressed="true"] {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+/* ─────── note list（カード） ─────── */
 .note-list {
   list-style: none;
   padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
-.note-list li {
-  padding: 0.6rem 0;
-  border-bottom: 1px solid var(--color-border);
+.note-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 1rem 1.1rem 1rem 1.25rem;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--cat-color, var(--cat-misc));
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.note-card:hover,
+.note-card:focus-within {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-card {
+    transition: none;
+  }
+  .note-card:hover,
+  .note-card:focus-within {
+    transform: none;
+  }
+}
+
+.note-card[hidden] {
+  display: none;
+}
+
+.note-card[data-category="web"]      { --cat-color: var(--cat-web); }
+.note-card[data-category="security"] { --cat-color: var(--cat-security); }
+.note-card[data-category="tools"]    { --cat-color: var(--cat-tools); }
+.note-card[data-category="design"]   { --cat-color: var(--cat-design); }
+.note-card[data-category="infra"]    { --cat-color: var(--cat-infra); }
+.note-card[data-category="ai"]       { --cat-color: var(--cat-ai); }
+.note-card[data-category="misc"]     { --cat-color: var(--cat-misc); }
+
+.note-card__head {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
 }
 
-.note-list time {
+.note-card__head time {
   color: var(--color-muted);
-  font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
+}
+
+.note-card__title {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 1.05rem;
+  line-height: 1.4;
+}
+
+.note-card__title a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.note-card__title a:hover {
+  color: var(--color-link);
+  text-decoration: underline;
+}
+
+.note-card__summary {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.note-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.4rem;
+  list-style: none;
+  padding: 0;
+  margin: 0.15rem 0 0;
+  font-size: 0.78rem;
+  color: var(--color-muted);
+}
+
+.note-card__tags li {
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border-soft);
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
 }
 
 .note-list__empty {
   color: var(--color-muted);
+  text-align: center;
+  padding: 1.5rem 0;
 }
 
-/* article */
+/* ─────── badges ─────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 999px;
+  background: var(--cat-color, var(--cat-misc));
+  color: var(--cat-on-color);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.badge--web      { background: var(--cat-web); }
+.badge--security { background: var(--cat-security); }
+.badge--tools    { background: var(--cat-tools); }
+.badge--design   { background: var(--cat-design); }
+.badge--infra    { background: var(--cat-infra); }
+.badge--ai       { background: var(--cat-ai); }
+.badge--misc     { background: var(--cat-misc); }
+
+/* ─────── article ─────── */
 .note-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
   color: var(--color-muted);
   font-size: 0.9rem;
   margin-bottom: 2rem;
@@ -131,7 +353,7 @@ article :is(p, ul, ol) {
   margin: 1rem 0;
 }
 
-/* code */
+/* ─────── code ─────── */
 code {
   font-family: var(--font-mono);
   font-size: 0.9em;
@@ -143,8 +365,9 @@ code {
 pre {
   background: var(--color-code-bg);
   padding: 1rem;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   overflow-x: auto;
+  border: 1px solid var(--color-border-soft);
 }
 
 pre code {
@@ -152,7 +375,7 @@ pre code {
   padding: 0;
 }
 
-/* misc */
+/* ─────── misc ─────── */
 img {
   max-width: 100%;
   height: auto;
@@ -160,13 +383,77 @@ img {
 
 blockquote {
   margin: 1rem 0;
-  padding-left: 1rem;
-  border-left: 4px solid var(--color-border);
-  color: var(--color-muted);
+  padding: 0.6rem 1rem;
+  background: var(--color-accent-soft);
+  border-left: 4px solid var(--color-accent);
+  color: var(--color-text);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
+
+blockquote :is(p):first-child { margin-top: 0; }
+blockquote :is(p):last-child  { margin-bottom: 0; }
 
 .back-link {
   display: inline-block;
   margin-bottom: 1.5rem;
   font-size: 0.95rem;
+}
+
+/* ─────── diagrams（インラインSVG / Mermaid 共通） ─────── */
+.diagram {
+  margin: 1.5rem auto;
+  padding: 1rem 1rem 0.75rem;
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.diagram svg {
+  max-width: 100%;
+  height: auto;
+  color: var(--color-text); /* SVG 内で currentColor が使える */
+}
+
+/* SVG ノードの基本スタイル：currentColor / var(--color-accent) を活用 */
+.diagram .node {
+  fill: var(--color-bg-raised);
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+.diagram .node--accent {
+  fill: var(--color-accent-soft);
+  stroke: var(--color-accent);
+}
+
+.diagram .label {
+  fill: var(--color-text);
+  font: 600 15px var(--font-sans);
+}
+
+.diagram .label--muted {
+  fill: var(--color-muted);
+  font-weight: 400;
+}
+
+.diagram .arrow {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  /* marker-end は SVG 側で `marker-end="url(#<diagram-id>-arrow)"` のように
+     図ごとに固有な marker id を参照する（同一ページ内の id 衝突回避）。 */
+}
+
+.diagram figcaption {
+  margin-top: 0.75rem;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+/* Mermaid 描画コンテナ（テンプレで CDN を読み込んだ場合に有効） */
+.mermaid {
+  display: flex;
+  justify-content: center;
+  margin: 1.5rem 0;
 }
