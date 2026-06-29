@@ -86,7 +86,7 @@
         <svg viewBox="0 0 640 220" role="img" aria-labelledby="guardrails-title" xmlns="http://www.w3.org/2000/svg">
           <title id="guardrails-title">ガードレールの5層構成：書き手の手元からGitHub上の公開判定まで段階的に検査が走る</title>
           <defs>
-            <marker id="diagram-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+            <marker id="guardrails-arrow" viewBox="0 0 10 10" refX="9" refY="5"
                     markerWidth="8" markerHeight="8" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
             </marker>
@@ -128,10 +128,10 @@
           <text class="label label--muted" x="580" y="140" text-anchor="middle">保護</text>
 
           <!-- 矢印（左から右へ流れていく） -->
-          <path class="arrow" d="M130 115 L150 115"/>
-          <path class="arrow" d="M260 115 L280 115"/>
-          <path class="arrow" d="M390 115 L410 115"/>
-          <path class="arrow" d="M520 115 L540 115"/>
+          <path class="arrow" d="M130 115 L150 115" marker-end="url(#guardrails-arrow)"/>
+          <path class="arrow" d="M260 115 L280 115" marker-end="url(#guardrails-arrow)"/>
+          <path class="arrow" d="M390 115 L410 115" marker-end="url(#guardrails-arrow)"/>
+          <path class="arrow" d="M520 115 L540 115" marker-end="url(#guardrails-arrow)"/>
 
           <!-- 流れの説明 -->
           <text class="label label--muted" x="320" y="200" text-anchor="middle">commit → push → PR → merge（=公開）</text>

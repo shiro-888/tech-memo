@@ -22,15 +22,15 @@
       カテゴリフィルタ。data-filter の値（all / web / security / tools /
       design / infra / ai / misc）と .note-card[data-category] を対応させる。
     -->
-    <ul class="category-filter" role="tablist" aria-label="カテゴリで絞り込み">
-      <li><button class="category-filter__chip" data-filter="all"      aria-pressed="true">すべて</button></li>
-      <li><button class="category-filter__chip" data-filter="web"      aria-pressed="false">Web開発</button></li>
-      <li><button class="category-filter__chip" data-filter="security" aria-pressed="false">セキュリティ</button></li>
-      <li><button class="category-filter__chip" data-filter="tools"    aria-pressed="false">ツール</button></li>
-      <li><button class="category-filter__chip" data-filter="design"   aria-pressed="false">設計</button></li>
-      <li><button class="category-filter__chip" data-filter="infra"    aria-pressed="false">インフラ</button></li>
-      <li><button class="category-filter__chip" data-filter="ai"       aria-pressed="false">AI</button></li>
-      <li><button class="category-filter__chip" data-filter="misc"     aria-pressed="false">その他</button></li>
+    <ul class="category-filter" role="toolbar" aria-label="カテゴリで絞り込み">
+      <li role="presentation"><button type="button" class="category-filter__chip" data-filter="all"      aria-pressed="true">すべて</button></li>
+      <li role="presentation"><button type="button" class="category-filter__chip" data-filter="web"      aria-pressed="false">Web開発</button></li>
+      <li role="presentation"><button type="button" class="category-filter__chip" data-filter="security" aria-pressed="false">セキュリティ</button></li>
+      <li role="presentation"><button type="button" class="category-filter__chip" data-filter="tools"    aria-pressed="false">ツール</button></li>
+      <li role="presentation"><button type="button" class="category-filter__chip" data-filter="design"   aria-pressed="false">設計</button></li>
+      <li role="presentation"><button type="button" class="category-filter__chip" data-filter="infra"    aria-pressed="false">インフラ</button></li>
+      <li role="presentation"><button type="button" class="category-filter__chip" data-filter="ai"       aria-pressed="false">AI</button></li>
+      <li role="presentation"><button type="button" class="category-filter__chip" data-filter="misc"     aria-pressed="false">その他</button></li>
     </ul>
 
     <!--
