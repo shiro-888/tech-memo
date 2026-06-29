@@ -5,8 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- TODO: タイトルを記事名に差し替える -->
   <title>記事タイトル — tech-memo</title>
-  <!-- TODO: 100文字程度の説明に差し替える -->
+  <!-- TODO: 100文字程度の説明に差し替える（OGP/検索結果でも使われる） -->
   <meta name="description" content="この記事の概要。">
+  <!--
+    TODO: カテゴリを差し替える。トップページのカード（index.html）の
+    data-category と badge クラスはこれと揃える。
+    値: web | security | tools | design | infra | ai | misc
+  -->
+  <meta name="article:category" content="misc">
+  <!-- TODO: トップページのカードに出す概要文（80〜120文字目安）に差し替える -->
+  <meta name="article:summary" content="トップページのカードに表示される概要文。本文の description より少し噛み砕いた紹介を書く。">
+  <!-- TODO: 任意。タグはカンマ区切り（例: pre-commit,gitleaks,CI） -->
+  <meta name="article:tags" content="">
+
   <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
   <link rel="stylesheet" href="../../styles/site.css">
 </head>
@@ -23,8 +34,14 @@
     <article>
       <!-- TODO: 見出しを記事名に差し替える -->
       <h1>記事タイトル</h1>
-      <!-- TODO: 公開日を差し替える（datetime と表示テキストの両方） -->
-      <p class="note-meta"><time datetime="2026-01-01">2026-01-01</time></p>
+      <!--
+        TODO: 公開日とカテゴリバッジを差し替える（datetime と表示テキストの両方）。
+        バッジは badge--web / --security / --tools / --design / --infra / --ai / --misc から選ぶ。
+      -->
+      <p class="note-meta">
+        <span class="badge badge--misc">その他</span>
+        <time datetime="2026-01-01">2026-01-01</time>
+      </p>
 
       <p>ここから本文を書く。</p>
 

@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>このサイトの作り方 — ガードレールを土台にした技術ノートサイト — tech-memo</title>
   <meta name="description" content="技術ノートサイトをガードレール（誤公開防止の仕組み）から先に作った記録。pre-commit・gitleaks・CI・ブランチ保護を初心者向けに周辺知識つきで解説する。">
+  <meta name="article:category" content="security">
+  <meta name="article:summary" content="技術ノートサイトをガードレール（誤公開防止の仕組み）から先に作った記録。pre-commit・gitleaks・CI・ブランチ保護を初心者向けに周辺知識つきで解説する。">
+  <meta name="article:tags" content="pre-commit,gitleaks,GitHub Actions,ブランチ保護">
   <!-- CSSはルートから2階層下を参照（notes/<slug>/index.html） -->
   <link rel="stylesheet" href="../../styles/site.css">
 </head>
@@ -20,7 +23,10 @@
 
     <article>
       <h1>このサイトの作り方 — ガードレールを土台にした技術ノートサイト</h1>
-      <p class="note-meta"><time datetime="2026-06-28">2026-06-28</time></p>
+      <p class="note-meta">
+        <span class="badge badge--security">セキュリティ</span>
+        <time datetime="2026-06-28">2026-06-28</time>
+      </p>
 
       <p>
         このサイト（tech-memo）は、技術的に学んだことを書き留めて公開するための

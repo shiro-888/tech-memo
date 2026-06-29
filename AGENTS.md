@@ -39,10 +39,17 @@
 
 1. `notes/_drafts/<slug>.html` を `notes/template/index.html` を元に作成する。
 2. 執筆中はここに置き、`index.html` からはリンクしない。
-3. 上記「公開前の必須チェック」をすべて確認する。
-4. 完成したら `notes/<公開日-スラッグ>/index.html`（例: `notes/2026-06-28-slug/index.html`）へ移動する。下書き・公開とも 2 階層下なので相対パス（`../../`）の修正は不要。
-5. `index.html` の `.note-list` に新しい `<li>`（リンクと `<time>`）を追加する。
-6. コミットして PR を作成する（`main` への直接 push は避け、PR 経由で公開する）。
+3. **メタデータを記入する**: `<meta name="article:category">`（`web|security|tools|design|infra|ai|misc` から選択）、`<meta name="article:summary">`（80〜120文字）、`<meta name="article:tags">`（任意、カンマ区切り）。`<article>` 冒頭の `.note-meta` 内 `badge--<category>` クラスも揃える。
+4. 上記「公開前の必須チェック」をすべて確認する。
+5. 完成したら `notes/<公開日-スラッグ>/index.html`（例: `notes/2026-06-28-slug/index.html`）へ移動する。下書き・公開とも 2 階層下なので相対パス（`../../`）の修正は不要。
+6. `index.html` の `.note-list` に新しい `<li class="note-card">` カードを追加する（記事メタを複製。詳細は `.claude/commands/publish.md` 参照）。
+7. コミットして PR を作成する（`main` への直接 push は避け、PR 経由で公開する）。
+
+## カテゴリ / 図解の方針
+
+- **カテゴリ**: `web`（Web開発）/ `security`（セキュリティ）/ `tools`（ツール・運用）/ `design`（設計・アーキテクチャ）/ `infra`（インフラ・CI/CD）/ `ai`（AI/機械学習）/ `misc`（その他）の7種。これは `styles/site.css` の `--cat-*` トークンと `.badge--*` クラスに一致する。新カテゴリを足す場合は両方を更新する。
+- **図解**: 仕組み・関係・流れの説明には**インラインSVG**を第一選択にする（`.diagram` クラス、`currentColor`・`var(--color-*)` でテーマ追従、外部依存ゼロ）。フロー/シーケンス図など量が多い記事のみ Mermaid CDN を `<head>` で読み込む（テンプレのコメント参照）。
+- **シンタックスハイライト**: 必要な記事のみ Prism CDN を `<head>` で読み込む。不要な記事では読み込まない（依存ゼロを優先）。
 
 ### Claude Code コマンドでの自動化
 
