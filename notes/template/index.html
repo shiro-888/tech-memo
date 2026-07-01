@@ -80,8 +80,13 @@ console.log("hello");
         marker の id は同一ページ内で衝突しないよう図ごとに固有名にする
         （例: ex-arrow / guardrails-arrow）。.arrow の marker-end も同じ id を参照。
       -->
+      <!--
+        svg の style="--diagram-min-width: NNpx" は、狭い画面で図が縮みすぎて
+        文字が読めなくなるのを防ぐための最小幅（目安: viewBox 幅の 7 割程度）。
+        コンテナがこの幅より狭い場合は横スクロールに切り替わる（styles/site.css 参照）。
+      -->
       <figure class="diagram">
-        <svg viewBox="0 0 420 140" role="img" aria-labelledby="ex-diagram-title" xmlns="http://www.w3.org/2000/svg">
+        <svg viewBox="0 0 420 140" style="--diagram-min-width: 300px" role="img" aria-labelledby="ex-diagram-title" xmlns="http://www.w3.org/2000/svg">
           <title id="ex-diagram-title">図の概要（スクリーンリーダ向け）</title>
           <defs>
             <marker id="ex-arrow" viewBox="0 0 10 10" refX="9" refY="5"
