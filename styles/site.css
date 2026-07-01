@@ -407,10 +407,14 @@ blockquote :is(p):last-child  { margin-bottom: 0; }
   border: 1px solid var(--color-border-soft);
   border-radius: var(--radius);
   text-align: center;
+  /* 狭い画面で svg が --diagram-min-width 未満に縮むと横スクロールに切り替える
+     （文字が潰れて読めなくなるのを防ぐ。目安は各図の viewBox 幅の 7 割程度）。 */
+  overflow-x: auto;
 }
 
 .diagram svg {
   max-width: 100%;
+  min-width: var(--diagram-min-width, 0px);
   height: auto;
   color: var(--color-text); /* SVG 内で currentColor が使える */
 }
