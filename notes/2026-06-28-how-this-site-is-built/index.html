@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>このサイトの作り方 — ガードレールを土台にした技術ノートサイト — tech-memo</title>
   <meta name="description" content="技術ノートサイトをガードレール（誤公開防止の仕組み）から先に作った記録。pre-commit・gitleaks・CI・ブランチ保護を初心者向けに周辺知識つきで解説する。">
+  <meta name="article:category" content="security">
+  <meta name="article:summary" content="技術ノートサイトをガードレール（誤公開防止の仕組み）から先に作った記録。pre-commit・gitleaks・CI・ブランチ保護を初心者向けに周辺知識つきで解説する。">
+  <meta name="article:tags" content="pre-commit,gitleaks,GitHub Actions,ブランチ保護">
   <!-- CSSはルートから2階層下を参照（notes/<slug>/index.html） -->
   <link rel="stylesheet" href="../../styles/site.css">
 </head>
@@ -20,7 +23,10 @@
 
     <article>
       <h1>このサイトの作り方 — ガードレールを土台にした技術ノートサイト</h1>
-      <p class="note-meta"><time datetime="2026-06-28">2026-06-28</time></p>
+      <p class="note-meta">
+        <span class="badge badge--security">セキュリティ</span>
+        <time datetime="2026-06-28">2026-06-28</time>
+      </p>
 
       <p>
         このサイト（tech-memo）は、技術的に学んだことを書き留めて公開するための
@@ -75,6 +81,63 @@
         一つの仕組みに頼ると、それが破られたら終わりです。そこで、性質の違う
         防御を<strong>重ねて</strong>配置しました（多層防御）。
       </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 640 220" style="--diagram-min-width: 450px" role="img" aria-labelledby="guardrails-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="guardrails-title">ガードレールの5層構成：書き手の手元からGitHub上の公開判定まで段階的に検査が走る</title>
+          <defs>
+            <marker id="guardrails-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- 左：書き手（手元） -->
+          <text class="label label--muted" x="60"  y="22" text-anchor="middle">手元（ローカル）</text>
+          <text class="label label--muted" x="370" y="22" text-anchor="middle">GitHub（サーバ）</text>
+
+          <!-- 5層を等間隔に並べる -->
+          <!-- 層1 .gitignore -->
+          <rect class="node" x="20"  y="60" width="110" height="110" rx="10"/>
+          <text class="label" x="75" y="100" text-anchor="middle">層1</text>
+          <text class="label label--muted" x="75" y="120" text-anchor="middle">.gitignore</text>
+          <text class="label label--muted" x="75" y="140" text-anchor="middle">追跡しない</text>
+
+          <!-- 層2 pre-commit -->
+          <rect class="node" x="150" y="60" width="110" height="110" rx="10"/>
+          <text class="label" x="205" y="100" text-anchor="middle">層2</text>
+          <text class="label label--muted" x="205" y="120" text-anchor="middle">pre-commit</text>
+          <text class="label label--muted" x="205" y="140" text-anchor="middle">+ gitleaks</text>
+
+          <!-- 層3 Push protection -->
+          <rect class="node node--accent" x="280" y="60" width="110" height="110" rx="10"/>
+          <text class="label" x="335" y="100" text-anchor="middle">層3</text>
+          <text class="label label--muted" x="335" y="120" text-anchor="middle">Secret scan</text>
+          <text class="label label--muted" x="335" y="140" text-anchor="middle">Push protect</text>
+
+          <!-- 層4 CI -->
+          <rect class="node node--accent" x="410" y="60" width="110" height="110" rx="10"/>
+          <text class="label" x="465" y="100" text-anchor="middle">層4</text>
+          <text class="label label--muted" x="465" y="120" text-anchor="middle">CI</text>
+          <text class="label label--muted" x="465" y="140" text-anchor="middle">guardrails</text>
+
+          <!-- 層5 ブランチ保護 -->
+          <rect class="node node--accent" x="540" y="60" width="80"  height="110" rx="10"/>
+          <text class="label" x="580" y="100" text-anchor="middle">層5</text>
+          <text class="label label--muted" x="580" y="120" text-anchor="middle">ブランチ</text>
+          <text class="label label--muted" x="580" y="140" text-anchor="middle">保護</text>
+
+          <!-- 矢印（左から右へ流れていく） -->
+          <path class="arrow" d="M130 115 L150 115" marker-end="url(#guardrails-arrow)"/>
+          <path class="arrow" d="M260 115 L280 115" marker-end="url(#guardrails-arrow)"/>
+          <path class="arrow" d="M390 115 L410 115" marker-end="url(#guardrails-arrow)"/>
+          <path class="arrow" d="M520 115 L540 115" marker-end="url(#guardrails-arrow)"/>
+
+          <!-- 流れの説明 -->
+          <text class="label label--muted" x="320" y="200" text-anchor="middle">commit → push → PR → merge（=公開）</text>
+        </svg>
+        <figcaption>図1: 5つの層が直列に並び、どこかで止まれば誤公開を防げる。アクセント色が GitHub 上の層。</figcaption>
+      </figure>
 
       <h3>層1：.gitignore — そもそも追跡しない</h3>
       <p>

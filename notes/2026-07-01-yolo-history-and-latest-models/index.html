@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>画像認識における YOLO の歴史と最新モデル — 一段階検出器のすすみ方 — tech-memo</title>
   <meta name="description" content="物体検出の代表格 YOLO を、二段階検出器との違いから世代ごとの進化（v1〜v12）、YOLO-NAS・YOLO-World、mAP と速度のトレードオフまで初心者向けに整理した技術ノート。">
-  <!-- CSSはルートから2階層下を参照（notes/_drafts/<slug>.html） -->
+  <meta name="article:category" content="ai">
+  <meta name="article:summary" content="物体検出の定番 YOLO を、二段階検出器との違い・世代ごとの進化（v1〜v12）・派生モデル・mAP と速度のトレードオフまで初心者向けに整理。">
+  <meta name="article:tags" content="物体検出,YOLO,コンピュータビジョン,深層学習">
+  <!-- CSSはルートから2階層下を参照（notes/<slug>/index.html） -->
   <link rel="stylesheet" href="../../styles/site.css">
 </head>
 <body>
@@ -20,7 +23,10 @@
 
     <article>
       <h1>画像認識における YOLO の歴史と最新モデル — 一段階検出器のすすみ方</h1>
-      <p class="note-meta"><time datetime="2026-06-28">2026-06-28</time></p>
+      <p class="note-meta">
+        <span class="badge badge--ai">AI</span>
+        <time datetime="2026-07-01">2026-07-01</time>
+      </p>
 
       <p>
         画像から「何が・どこに」写っているかを当てる<strong>物体検出</strong>の
@@ -98,6 +104,45 @@
         <strong>一段階検出器（one-stage detector）</strong>と呼びます。
       </p>
 
+      <figure class="diagram">
+        <svg viewBox="0 0 620 190" style="--diagram-min-width: 440px" role="img" aria-labelledby="stage-compare-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="stage-compare-title">二段階検出器と一段階検出器（YOLO）の処理の流れの比較</title>
+          <defs>
+            <marker id="stage-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <text class="label label--muted" x="20" y="16">二段階検出器（R-CNN 系）</text>
+          <rect class="node" x="20"  y="30" width="70"  height="50" rx="8"/>
+          <rect class="node" x="120" y="30" width="130" height="50" rx="8"/>
+          <rect class="node" x="280" y="30" width="130" height="50" rx="8"/>
+          <rect class="node" x="440" y="30" width="100" height="50" rx="8"/>
+          <text class="label" x="55"  y="60" text-anchor="middle">画像</text>
+          <text class="label" x="185" y="52" text-anchor="middle">候補領域</text>
+          <text class="label" x="185" y="68" text-anchor="middle">抽出</text>
+          <text class="label" x="345" y="52" text-anchor="middle">分類・枠</text>
+          <text class="label" x="345" y="68" text-anchor="middle">調整</text>
+          <text class="label" x="490" y="60" text-anchor="middle">検出結果</text>
+          <path class="arrow" d="M90 55 L120 55"  marker-end="url(#stage-arrow)"/>
+          <path class="arrow" d="M250 55 L280 55" marker-end="url(#stage-arrow)"/>
+          <path class="arrow" d="M410 55 L440 55" marker-end="url(#stage-arrow)"/>
+
+          <text class="label label--muted" x="20" y="106">一段階検出器（YOLO）</text>
+          <rect class="node" x="20"  y="120" width="70"  height="50" rx="8"/>
+          <rect class="node node--accent" x="120" y="120" width="160" height="50" rx="8"/>
+          <rect class="node" x="310" y="120" width="100" height="50" rx="8"/>
+          <text class="label" x="55"  y="150" text-anchor="middle">画像</text>
+          <text class="label" x="200" y="142" text-anchor="middle">ネットワークに</text>
+          <text class="label" x="200" y="158" text-anchor="middle">1回通す</text>
+          <text class="label" x="360" y="150" text-anchor="middle">検出結果</text>
+          <path class="arrow" d="M90 145 L120 145" marker-end="url(#stage-arrow)"/>
+          <path class="arrow" d="M280 145 L310 145" marker-end="url(#stage-arrow)"/>
+        </svg>
+        <figcaption>図1: 二段階検出器は「候補抽出→分類」の2段構え、YOLO はこれを1回のネットワーク推論にまとめる。</figcaption>
+      </figure>
+
       <h2>評価指標を押さえる（mAP と速度のトレードオフ）</h2>
       <p>
         各世代の「良さ」を比べるには、ものさし（評価指標）を知っておくと
@@ -120,6 +165,35 @@
         「この2つをいかに高い次元で両立させるか」の追求の歴史でもあります。
       </p>
 
+      <figure class="diagram">
+        <svg viewBox="0 0 480 260" style="--diagram-min-width: 340px" role="img" aria-labelledby="tradeoff-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="tradeoff-title">精度（mAP）と速度（FPS）はトレードオフになりやすいことを示す概念図</title>
+          <defs>
+            <marker id="tradeoff-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <path class="arrow" d="M60 220 L440 220" marker-end="url(#tradeoff-arrow)"/>
+          <path class="arrow" d="M60 220 L60 20"   marker-end="url(#tradeoff-arrow)"/>
+          <text class="label label--muted" x="436" y="242" text-anchor="end">速度（FPS）</text>
+          <text class="label label--muted" x="64" y="16">精度（mAP）</text>
+
+          <path d="M110 55 C 220 90, 300 150, 370 175" fill="none" stroke="currentColor"
+                stroke-width="1.5" stroke-dasharray="5 5" opacity="0.6"/>
+
+          <circle class="node node--accent" cx="110" cy="55"  r="8"/>
+          <text class="label" x="110" y="38" text-anchor="middle">大きいモデル</text>
+          <text class="label label--muted" x="110" y="82" text-anchor="middle">精度は高いが遅い</text>
+
+          <circle class="node node--accent" cx="370" cy="175" r="8"/>
+          <text class="label" x="370" y="200" text-anchor="middle">軽量モデル</text>
+          <text class="label label--muted" x="370" y="155" text-anchor="middle">速いが精度は控えめ</text>
+        </svg>
+        <figcaption>図2: 精度（mAP）と速度（FPS）はトレードオフになりやすい（概念図であり、実際の数値やモデルを表すものではない）。</figcaption>
+      </figure>
+
       <h2>YOLO の歴史 — 世代ごとの進化</h2>
       <p>
         YOLO は単一のチームが一貫して開発してきたわけではなく、
@@ -128,6 +202,73 @@
         系統ごとにまとめます。発表年や細かな数値は情報源により表記が
         揺れることがあるため、おおまかな時期として読んでください。
       </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 820 360" style="--diagram-min-width: 580px" role="img" aria-labelledby="lineage-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="lineage-title">YOLO の系譜図：開発主体ごとに複数の系統が並行して世代を重ねている（発表年はおおよその目安）</title>
+          <defs>
+            <marker id="lineage-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- Row1: Redmon 系 -->
+          <text class="label label--muted" x="140" y="15">Redmon 系</text>
+          <rect class="node" x="140" y="25" width="60" height="40" rx="8"/>
+          <rect class="node" x="240" y="25" width="60" height="40" rx="8"/>
+          <rect class="node" x="340" y="25" width="60" height="40" rx="8"/>
+          <text class="label" x="170" y="50" text-anchor="middle">v1</text>
+          <text class="label" x="270" y="50" text-anchor="middle">v2</text>
+          <text class="label" x="370" y="50" text-anchor="middle">v3</text>
+          <path class="arrow" d="M200 45 L240 45" marker-end="url(#lineage-arrow)"/>
+          <path class="arrow" d="M300 45 L340 45" marker-end="url(#lineage-arrow)"/>
+
+          <!-- Row2: Bochkovskiy・Wang・Liao 系 -->
+          <text class="label label--muted" x="340" y="80">Bochkovskiy・Wang・Liao 系</text>
+          <rect class="node" x="340" y="90" width="60" height="40" rx="8"/>
+          <rect class="node" x="520" y="90" width="60" height="40" rx="8"/>
+          <text class="label" x="370" y="115" text-anchor="middle">v4</text>
+          <text class="label" x="550" y="115" text-anchor="middle">v7</text>
+          <path class="arrow" d="M400 110 L520 110" marker-end="url(#lineage-arrow)"/>
+
+          <!-- Row3: 企業系（Meituan など） -->
+          <text class="label label--muted" x="430" y="140">企業系（Meituan など）</text>
+          <rect class="node" x="430" y="150" width="60" height="40" rx="8"/>
+          <text class="label" x="460" y="175" text-anchor="middle">v6</text>
+
+          <!-- Row4: Ultralytics 系 -->
+          <text class="label label--muted" x="340" y="200">Ultralytics 系</text>
+          <rect class="node" x="340" y="210" width="60" height="40" rx="8"/>
+          <rect class="node" x="520" y="210" width="60" height="40" rx="8"/>
+          <rect class="node" x="610" y="210" width="70" height="40" rx="8"/>
+          <text class="label" x="370" y="235" text-anchor="middle">v5</text>
+          <text class="label" x="550" y="235" text-anchor="middle">v8</text>
+          <text class="label" x="645" y="235" text-anchor="middle">v11</text>
+          <path class="arrow" d="M400 230 L520 230" marker-end="url(#lineage-arrow)"/>
+          <path class="arrow" d="M580 230 L610 230" marker-end="url(#lineage-arrow)"/>
+
+          <!-- Row5: 研究機関系 -->
+          <text class="label label--muted" x="520" y="260">研究機関系</text>
+          <rect class="node" x="520" y="270" width="60" height="40" rx="8"/>
+          <rect class="node" x="610" y="270" width="60" height="40" rx="8"/>
+          <text class="label" x="550" y="295" text-anchor="middle">v9</text>
+          <text class="label" x="640" y="295" text-anchor="middle">v10</text>
+          <path class="arrow" d="M580 290 L610 290" marker-end="url(#lineage-arrow)"/>
+
+          <!-- 最新動向（系統の位置づけは流動的） -->
+          <text class="label label--muted" x="720" y="80">最新動向</text>
+          <rect class="node node--accent" x="720" y="90" width="90" height="160" rx="10"/>
+          <text class="label" x="765" y="160" text-anchor="middle">v12系</text>
+          <text class="label label--muted" x="765" y="180" text-anchor="middle">(アテンション</text>
+          <text class="label label--muted" x="765" y="196" text-anchor="middle">2025年ごろ)</text>
+
+          <!-- 時間軸（目安） -->
+          <path class="arrow" d="M140 325 L800 325" marker-end="url(#lineage-arrow)"/>
+          <text class="label label--muted" x="470" y="345" text-anchor="middle">時間の流れ（発表年はおおよその目安）</text>
+        </svg>
+        <figcaption>図3: YOLO は単一の系統ではなく、開発主体ごとに複数の系譜が並行して世代を重ねてきた。v12系の位置づけは登場間もなく流動的。</figcaption>
+      </figure>
 
       <h3>YOLOv1〜v3（Joseph Redmon らによる原典）</h3>
       <p>

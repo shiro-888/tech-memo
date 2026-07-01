@@ -5,10 +5,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- TODO: タイトルを記事名に差し替える -->
   <title>記事タイトル — tech-memo</title>
-  <!-- TODO: 100文字程度の説明に差し替える -->
+  <!-- TODO: 100文字程度の説明に差し替える（OGP/検索結果でも使われる） -->
   <meta name="description" content="この記事の概要。">
+  <!--
+    TODO: カテゴリを差し替える。トップページのカード（index.html）の
+    data-category と badge クラスはこれと揃える。
+    値: web | security | tools | design | infra | ai | misc
+  -->
+  <meta name="article:category" content="misc">
+  <!-- TODO: トップページのカードに出す概要文（80〜120文字目安）に差し替える -->
+  <meta name="article:summary" content="トップページのカードに表示される概要文。本文の description より少し噛み砕いた紹介を書く。">
+  <!-- TODO: 任意。タグはカンマ区切り（例: pre-commit,gitleaks,CI） -->
+  <meta name="article:tags" content="">
+
   <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
   <link rel="stylesheet" href="../../styles/site.css">
+
+  <!--
+    任意: シンタックスハイライト（Prism.js）を使う場合のみコメントを外す。
+    使わない記事では読み込まないことで依存ゼロを保つ。
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    使い方: <pre><code class="language-bash">...</code></pre>
+  -->
+
+  <!--
+    任意: フロー/シーケンス図などを Mermaid で書く場合のみコメントを外す。
+    インラインSVGで足りる図ならこちらは不要（依存ゼロを優先）。
+    <script type="module">
+      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+      mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    使い方: <pre class="mermaid">...</pre> に Mermaid 記法を書く。
+    記法例（矢印 = ハイフン2つと不等号）は公式ドキュメント参照。
+  -->
 </head>
 <body>
   <header class="site-header">
@@ -23,8 +54,14 @@
     <article>
       <!-- TODO: 見出しを記事名に差し替える -->
       <h1>記事タイトル</h1>
-      <!-- TODO: 公開日を差し替える（datetime と表示テキストの両方） -->
-      <p class="note-meta"><time datetime="2026-01-01">2026-01-01</time></p>
+      <!--
+        TODO: 公開日とカテゴリバッジを差し替える（datetime と表示テキストの両方）。
+        バッジは badge--web / --security / --tools / --design / --infra / --ai / --misc から選ぶ。
+      -->
+      <p class="note-meta">
+        <span class="badge badge--misc">その他</span>
+        <time datetime="2026-01-01">2026-01-01</time>
+      </p>
 
       <p>ここから本文を書く。</p>
 
@@ -34,6 +71,40 @@
       <pre><code>// コードブロックの例
 console.log("hello");
 </code></pre>
+
+      <!--
+        図解の例（インラインSVG）。currentColor と var(--color-*) を使うと
+        ライト/ダークのテーマに自然に追従する。複雑な図は Mermaid を使う。
+      -->
+      <!--
+        marker の id は同一ページ内で衝突しないよう図ごとに固有名にする
+        （例: ex-arrow / guardrails-arrow）。.arrow の marker-end も同じ id を参照。
+      -->
+      <!--
+        svg の style="--diagram-min-width: NNpx" は、狭い画面で図が縮みすぎて
+        文字が読めなくなるのを防ぐための最小幅（目安: viewBox 幅の 7 割程度）。
+        コンテナがこの幅より狭い場合は横スクロールに切り替わる（styles/site.css 参照）。
+      -->
+      <figure class="diagram">
+        <svg viewBox="0 0 420 140" style="--diagram-min-width: 300px" role="img" aria-labelledby="ex-diagram-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="ex-diagram-title">図の概要（スクリーンリーダ向け）</title>
+          <defs>
+            <marker id="ex-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <rect class="node"          x="20"  y="40" width="100" height="60" rx="8"/>
+          <rect class="node node--accent" x="160" y="40" width="100" height="60" rx="8"/>
+          <rect class="node"          x="300" y="40" width="100" height="60" rx="8"/>
+          <text class="label" x="70"  y="76" text-anchor="middle">入力</text>
+          <text class="label" x="210" y="76" text-anchor="middle">処理</text>
+          <text class="label" x="350" y="76" text-anchor="middle">出力</text>
+          <path class="arrow" d="M120 70 L160 70" marker-end="url(#ex-arrow)"/>
+          <path class="arrow" d="M260 70 L300 70" marker-end="url(#ex-arrow)"/>
+        </svg>
+        <figcaption>図1: 図のキャプション（不要なら削除）</figcaption>
+      </figure>
 
       <blockquote>
         引用は出典を明記し、15語以内に収める（AGENTS.md の公開前チェック参照）。

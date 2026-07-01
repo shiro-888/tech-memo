@@ -16,23 +16,80 @@
   </header>
 
   <main class="container">
+    <p class="site-notice" role="note">
+      このサイトの記事は AI エージェントが作成しています。内容に誤りが含まれる場合があるため、重要な情報は公式ドキュメント等の一次情報でご確認ください。
+    </p>
+
     <h1>ノート一覧</h1>
 
     <!--
-      公開済みノートはここにリンクを追加する。
+      カテゴリフィルタ。data-filter の値（all / web / security / tools /
+      design / infra / ai / misc）と .note-card[data-category] を対応させる。
+    -->
+    <ul class="category-filter" role="toolbar" aria-label="カテゴリで絞り込み">
+      <li role="presentation"><button type="button" class="category-filter__chip" data-filter="all"      aria-pressed="true">すべて</button></li>
+      <li role="presentation"><button type="button" class="category-filter__chip" data-filter="web"      aria-pressed="false">Web開発</button></li>
+      <li role="presentation"><button type="button" class="category-filter__chip" data-filter="security" aria-pressed="false">セキュリティ</button></li>
+      <li role="presentation"><button type="button" class="category-filter__chip" data-filter="tools"    aria-pressed="false">ツール</button></li>
+      <li role="presentation"><button type="button" class="category-filter__chip" data-filter="design"   aria-pressed="false">設計</button></li>
+      <li role="presentation"><button type="button" class="category-filter__chip" data-filter="infra"    aria-pressed="false">インフラ</button></li>
+      <li role="presentation"><button type="button" class="category-filter__chip" data-filter="ai"       aria-pressed="false">AI</button></li>
+      <li role="presentation"><button type="button" class="category-filter__chip" data-filter="misc"     aria-pressed="false">その他</button></li>
+    </ul>
+
+    <!--
+      公開済みノートはここにカードとして追加する。
       未完成の記事は notes/_drafts/ に置き、ここからはリンクしないこと（AGENTS.md 参照）。
       追加例:
-        <li>
-          <a href="notes/2026-06-28-example/index.html">記事タイトル</a>
-          <time datetime="2026-06-28">2026-06-28</time>
+        <li class="note-card" data-category="web">
+          <div class="note-card__head">
+            <span class="badge badge--web">Web開発</span>
+            <time datetime="2026-06-28">2026-06-28</time>
+          </div>
+          <h2 class="note-card__title">
+            <a href="notes/2026-06-28-example/index.html">記事タイトル</a>
+          </h2>
+          <p class="note-card__summary">記事の概要を100文字程度で。</p>
+          <ul class="note-card__tags">
+            <li>#tag1</li><li>#tag2</li>
+          </ul>
         </li>
     -->
     <ul class="note-list">
-      <li>
-        <a href="notes/2026-06-28-how-this-site-is-built/index.html">このサイトの作り方 — ガードレールを土台にした技術ノートサイト</a>
-        <time datetime="2026-06-28">2026-06-28</time>
+      <li class="note-card" data-category="ai">
+        <div class="note-card__head">
+          <span class="badge badge--ai">AI</span>
+          <time datetime="2026-07-01">2026-07-01</time>
+        </div>
+        <h2 class="note-card__title">
+          <a href="notes/2026-07-01-yolo-history-and-latest-models/index.html">画像認識における YOLO の歴史と最新モデル — 一段階検出器のすすみ方</a>
+        </h2>
+        <p class="note-card__summary">物体検出の定番 YOLO を、二段階検出器との違い・世代ごとの進化（v1〜v12）・派生モデル・mAP と速度のトレードオフまで初心者向けに整理。</p>
+        <ul class="note-card__tags">
+          <li>#物体検出</li>
+          <li>#YOLO</li>
+          <li>#コンピュータビジョン</li>
+          <li>#深層学習</li>
+        </ul>
+      </li>
+      <li class="note-card" data-category="security">
+        <div class="note-card__head">
+          <span class="badge badge--security">セキュリティ</span>
+          <time datetime="2026-06-28">2026-06-28</time>
+        </div>
+        <h2 class="note-card__title">
+          <a href="notes/2026-06-28-how-this-site-is-built/index.html">このサイトの作り方 — ガードレールを土台にした技術ノートサイト</a>
+        </h2>
+        <p class="note-card__summary">技術ノートサイトをガードレール（誤公開防止の仕組み）から先に作った記録。pre-commit・gitleaks・CI・ブランチ保護を初心者向けに周辺知識つきで解説する。</p>
+        <ul class="note-card__tags">
+          <li>#pre-commit</li>
+          <li>#gitleaks</li>
+          <li>#GitHub Actions</li>
+          <li>#ブランチ保護</li>
+        </ul>
       </li>
     </ul>
+    <p class="note-list__empty" hidden>このカテゴリのノートはまだありません。</p>
   </main>
 
   <footer class="site-footer">
@@ -40,5 +97,30 @@
       <p>&copy; 2026 tech-memo</p>
     </div>
   </footer>
+
+  <script>
+    // カテゴリフィルタ：チップ押下で .note-card[data-category] を絞り込む。
+    // ノートが0件のときは empty メッセージを出す。依存なし、20行ほどの最小実装。
+    (function () {
+      const chips = document.querySelectorAll('.category-filter__chip');
+      const cards = document.querySelectorAll('.note-card');
+      const empty = document.querySelector('.note-list__empty');
+      if (!chips.length || !cards.length) return;
+
+      chips.forEach((chip) => {
+        chip.addEventListener('click', () => {
+          const filter = chip.dataset.filter;
+          chips.forEach((c) => c.setAttribute('aria-pressed', c === chip ? 'true' : 'false'));
+          let visible = 0;
+          cards.forEach((card) => {
+            const match = filter === 'all' || card.dataset.category === filter;
+            card.hidden = !match;
+            if (match) visible++;
+          });
+          if (empty) empty.hidden = visible !== 0;
+        });
+      });
+    })();
+  </script>
 </body>
 </html>
