@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Next.js 入門 — React を「実際に公開できる Web サイト」にするフレームワーク — tech-memo</title>
+  <meta name="description" content="Vercel が開発する React フレームワーク Next.js の入門ノート。React との役割分担、CSR・SSR・SSG・ISR の違い、ファイルベースルーティング、Server Components を初心者向けに解説。">
+  <meta name="article:category" content="web">
+  <meta name="article:summary" content="React ベースのフレームワーク Next.js を、React との役割分担・CSR/SSR/SSG などのレンダリング方式・ファイルベースルーティング・Server Components まで、実際に動かしながら初心者向けに整理。">
+  <meta name="article:tags" content="Next.js,React,フロントエンド,SSR">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>Next.js 入門 — React を「実際に公開できる Web サイト」にするフレームワーク</h1>
+      <p class="note-meta">
+        <span class="badge badge--web">Web開発</span>
+        <time datetime="2026-07-02">2026-07-02</time>
+      </p>
+
+      <p>
+        モダンな Web 開発の求人や技術記事で必ずといっていいほど目にする
+        <strong>Next.js</strong>（ネクストジェイエス）。「React は聞いたことが
+        あるけど、Next.js って何が違うの？」という疑問は、フロントエンドを
+        学び始めた人が最初にぶつかるポイントです。このノートでは、Next.js が
+        <strong>何を解決するためのものなのか</strong>を React との役割分担から
+        説き起こし、レンダリング方式（CSR/SSR/SSG）、ファイルベース
+        ルーティング、Server Components といった中心概念を初心者向けに
+        整理します。
+      </p>
+      <p>
+        本文中のコード例は、執筆時点の最新版である
+        <strong>Next.js 16 系</strong>（16.2.10）で実際にビルド・表示・操作を
+        確認しています。細かな仕様はバージョンにより変わり得るので、
+        最終的には公式ドキュメントを確認してください。
+      </p>
+
+      <h2>前提知識: React とは何だったか</h2>
+      <p>
+        Next.js は React の上に成り立っているので、まず React を一言で
+        おさらいします。<strong>React は「UI（画面の部品）を作るための
+        JavaScript ライブラリ」</strong>です。画面を
+        <strong>コンポーネント</strong>という部品の組み合わせとして記述し、
+        データ（状態）が変わると必要な部分だけを自動で描き直してくれます。
+      </p>
+      <ul>
+        <li><strong>コンポーネント</strong>：見た目と振る舞いをひとまとめにした
+          部品。関数として書き、HTML に似た <strong>JSX</strong> という記法で
+          画面を返す。</li>
+        <li><strong>状態（state）</strong>：カウンターの数値や入力内容など、
+          時間とともに変わるデータ。状態が変わると React が画面を更新する。</li>
+        <li><strong>宣言的 UI</strong>：「どう書き換えるか」ではなく
+          「この状態ならこう表示する」と書くスタイル。</li>
+      </ul>
+      <p>
+        重要なのは、React が守備範囲としているのは
+        <strong>あくまで「UI 部品を作ること」</strong>だという点です。
+        Web サイト・Web アプリを丸ごと作って公開するには、それ以外にも
+        たくさんの仕事があります。
+      </p>
+
+      <h2>React「だけ」では足りないもの — そこを埋めるのが Next.js</h2>
+      <p>
+        たとえば実際のサイトには複数のページがあり、URL ごとに表示を
+        切り替える<strong>ルーティング</strong>が必要です。検索エンジンや
+        SNS シェアのことを考えると、<strong>サーバ側で HTML を組み立てる</strong>
+        仕組みも欲しくなります。さらに、コードをまとめて配信可能な形に変換する
+        <strong>ビルド設定</strong>、画像の圧縮などの<strong>最適化</strong>、
+        フォームを受け取る<strong>サーバ側の処理（API）</strong>……。
+        素の React には、これらは含まれていません。
+      </p>
+      <p>
+        <strong>Next.js は、React を核にして、この「残り全部」を
+        ひとまとめに提供するフレームワーク</strong>です。Vercel 社が中心と
+        なって開発しているオープンソースソフトウェア（MIT ライセンス）で、
+        2016 年の公開以来、React 系フレームワークの定番として広く
+        使われています。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 640 260" style="--diagram-min-width: 450px" role="img" aria-labelledby="scope-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="scope-title">Next.js は React（UI 部品づくり）を核に、ルーティング・レンダリング・ビルド最適化・API までを提供する</title>
+          <rect class="node" x="20" y="20" width="600" height="220" rx="12"/>
+          <text class="label" x="40" y="52">Next.js（フレームワーク）</text>
+
+          <rect class="node node--accent" x="40" y="75" width="180" height="140" rx="10"/>
+          <text class="label" x="130" y="135" text-anchor="middle">React</text>
+          <text class="label label--muted" x="130" y="158" text-anchor="middle">UI 部品づくり</text>
+          <text class="label label--muted" x="130" y="176" text-anchor="middle">（コンポーネント）</text>
+
+          <rect class="node" x="250" y="75"  width="170" height="60" rx="8"/>
+          <rect class="node" x="440" y="75"  width="160" height="60" rx="8"/>
+          <rect class="node" x="250" y="155" width="170" height="60" rx="8"/>
+          <rect class="node" x="440" y="155" width="160" height="60" rx="8"/>
+          <text class="label" x="335" y="110" text-anchor="middle">ルーティング</text>
+          <text class="label" x="520" y="100" text-anchor="middle">レンダリング</text>
+          <text class="label label--muted" x="520" y="120" text-anchor="middle">SSR・SSG など</text>
+          <text class="label" x="335" y="180" text-anchor="middle">ビルド・最適化</text>
+          <text class="label label--muted" x="335" y="200" text-anchor="middle">画像・コード分割</text>
+          <text class="label" x="520" y="180" text-anchor="middle">API（サーバ処理）</text>
+          <text class="label label--muted" x="520" y="200" text-anchor="middle">Route Handlers</text>
+        </svg>
+        <figcaption>図1: React が受け持つのは「UI 部品づくり」。Next.js はそれを核に、サイト公開に必要な残りの仕事をまとめて提供する。</figcaption>
+      </figure>
+
+      <p>Next.js が標準で備える主な機能を挙げます。</p>
+      <ul>
+        <li><strong>ファイルベースルーティング</strong>：フォルダ構成がそのまま
+          URL になる（後述）。</li>
+        <li><strong>柔軟なレンダリング</strong>：ページごとにサーバ側レンダリング
+          （SSR）や事前生成（SSG）を使い分けられる。</li>
+        <li><strong>最適化機能</strong>：画像（<code>next/image</code>）や
+          フォントの最適化、JavaScript の自動コード分割。</li>
+        <li><strong>API の同居</strong>：Route Handlers という仕組みで、
+          同じプロジェクト内にサーバ側の処理（JSON を返す API など）を書ける。</li>
+        <li><strong>開発体験</strong>：保存すると即座に画面へ反映される
+          ホットリロードなど。設定ファイルをほぼ書かずに始められる。</li>
+      </ul>
+
+      <h2>レンダリング方式を理解する — CSR / SSR / SSG / ISR</h2>
+      <p>
+        Next.js の説明には CSR・SSR・SSG といった略語が頻出します。
+        これらは「<strong>HTML をいつ・どこで組み立てるか</strong>」の違いです。
+        ここを押さえると Next.js の価値がぐっと分かりやすくなります。
+      </p>
+
+      <h3>CSR（クライアントサイドレンダリング）</h3>
+      <p>
+        素の React アプリ（いわゆる SPA）の基本形です。サーバはほぼ空の HTML と
+        JavaScript を送り、<strong>ブラウザ側で JavaScript を実行して初めて
+        画面が描かれます</strong>。ページ遷移が速い一方、初回表示までに
+        時間がかかりやすく、JavaScript を実行しないクローラーには中身が
+        見えにくいという弱点があります。
+      </p>
+
+      <h3>SSR（サーバサイドレンダリング）</h3>
+      <p>
+        リクエストが来るたびに<strong>サーバ側で HTML を組み立ててから</strong>
+        ブラウザへ返す方式です。ブラウザは受け取った HTML をすぐ表示できるため
+        初回表示が速く、検索エンジンにも中身がそのまま伝わります。
+        ユーザーごと・アクセスごとに内容が変わるページに向きます。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 660 230" style="--diagram-min-width: 470px" role="img" aria-labelledby="csr-ssr-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="csr-ssr-title">CSR ではブラウザが JavaScript を実行してから描画するのに対し、SSR ではサーバが完成した HTML を返すためすぐ表示できる</title>
+          <defs>
+            <marker id="csr-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <text class="label label--muted" x="20" y="20">CSR（クライアントサイドレンダリング）</text>
+          <rect class="node" x="20"  y="35" width="110" height="50" rx="8"/>
+          <rect class="node" x="270" y="35" width="110" height="50" rx="8"/>
+          <rect class="node" x="520" y="35" width="120" height="50" rx="8"/>
+          <text class="label" x="75"  y="65" text-anchor="middle">サーバ</text>
+          <text class="label" x="325" y="65" text-anchor="middle">ブラウザ</text>
+          <text class="label" x="580" y="65" text-anchor="middle">画面表示</text>
+          <path class="arrow" d="M130 60 L270 60" marker-end="url(#csr-arrow)"/>
+          <path class="arrow" d="M380 60 L520 60" marker-end="url(#csr-arrow)"/>
+          <text class="label label--muted" x="200" y="50" text-anchor="middle">ほぼ空のHTML+JS</text>
+          <text class="label label--muted" x="450" y="50" text-anchor="middle">JSを実行して描画</text>
+
+          <text class="label label--muted" x="20" y="130">SSR（サーバサイドレンダリング）</text>
+          <rect class="node node--accent" x="20" y="145" width="110" height="60" rx="8"/>
+          <rect class="node" x="270" y="150" width="110" height="50" rx="8"/>
+          <rect class="node" x="520" y="150" width="120" height="50" rx="8"/>
+          <text class="label" x="75"  y="170" text-anchor="middle">サーバ</text>
+          <text class="label label--muted" x="75" y="190" text-anchor="middle">HTMLを生成</text>
+          <text class="label" x="325" y="180" text-anchor="middle">ブラウザ</text>
+          <text class="label" x="580" y="180" text-anchor="middle">画面表示</text>
+          <path class="arrow" d="M130 175 L270 175" marker-end="url(#csr-arrow)"/>
+          <path class="arrow" d="M380 175 L520 175" marker-end="url(#csr-arrow)"/>
+          <text class="label label--muted" x="200" y="165" text-anchor="middle">完成したHTML</text>
+          <text class="label label--muted" x="450" y="165" text-anchor="middle">すぐに表示できる</text>
+        </svg>
+        <figcaption>図2: CSR はブラウザ側で描画が始まるまで画面が空。SSR は完成した HTML が届くので初回表示が速い。</figcaption>
+      </figure>
+
+      <h3>SSG（静的サイト生成）と ISR</h3>
+      <p>
+        <strong>SSG（Static Site Generation）</strong>は、SSR をさらに前倒しして
+        <strong>ビルド時（デプロイ前）に HTML を作り置き</strong>しておく方式です。
+        アクセス時はできあがった HTML を配るだけなので最速で、ブログや
+        ドキュメントのように内容が頻繁には変わらないページに最適です。
+        <strong>ISR（Incremental Static Regeneration）</strong>はその発展形で、
+        作り置きした HTML を<strong>一定時間ごとに裏側で作り直す</strong>ことで、
+        「静的の速さ」と「内容の新しさ」を両立します。
+      </p>
+      <p>
+        Next.js の強みは、これらを<strong>ページ単位で使い分けられる</strong>
+        ことです。トップページは SSG、マイページは SSR、ブログは ISR……と
+        いった構成が 1 つのプロジェクトの中で自然に実現できます。実際、
+        後述の最小アプリをビルドすると、変化する要素のないページは自動的に
+        静的生成（プリレンダリング）されました。
+      </p>
+
+      <h2>ファイルベースルーティング — フォルダ構成がそのまま URL になる</h2>
+      <p>
+        Next.js では、ルーティング用のライブラリを入れて設定を書く代わりに、
+        <strong><code>app</code> フォルダの中の構成がそのまま URL に対応</strong>
+        します。フォルダを掘って <code>page.js</code>（または
+        <code>page.tsx</code>）を置けば、それが新しいページになります。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 640 210" style="--diagram-min-width: 450px" role="img" aria-labelledby="route-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="route-title">app フォルダ内のファイル配置と URL の対応関係。app/page.js はルート、app/about/page.js は /about、app/blog/[slug]/page.js は /blog/任意の文字列 に対応する</title>
+          <defs>
+            <marker id="route-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <text class="label label--muted" x="20" y="25">ファイル配置</text>
+          <text class="label label--muted" x="450" y="25">URL</text>
+
+          <rect class="node" x="20" y="40" width="280" height="42" rx="8"/>
+          <rect class="node" x="20" y="100" width="280" height="42" rx="8"/>
+          <rect class="node" x="20" y="160" width="280" height="42" rx="8"/>
+          <text class="label" x="160" y="66"  text-anchor="middle">app/page.js</text>
+          <text class="label" x="160" y="126" text-anchor="middle">app/about/page.js</text>
+          <text class="label" x="160" y="186" text-anchor="middle">app/blog/[slug]/page.js</text>
+
+          <rect class="node node--accent" x="450" y="40" width="170" height="42" rx="8"/>
+          <rect class="node node--accent" x="450" y="100" width="170" height="42" rx="8"/>
+          <rect class="node node--accent" x="450" y="160" width="170" height="42" rx="8"/>
+          <text class="label" x="535" y="66"  text-anchor="middle">/</text>
+          <text class="label" x="535" y="126" text-anchor="middle">/about</text>
+          <text class="label" x="535" y="186" text-anchor="middle">/blog/hello など</text>
+
+          <path class="arrow" d="M300 61  L450 61"  marker-end="url(#route-arrow)"/>
+          <path class="arrow" d="M300 121 L450 121" marker-end="url(#route-arrow)"/>
+          <path class="arrow" d="M300 181 L450 181" marker-end="url(#route-arrow)"/>
+        </svg>
+        <figcaption>図3: ファイルベースルーティング。<code>[slug]</code> のような角かっこ付きフォルダは「動的ルート」で、URL の一部を変数として受け取れる。</figcaption>
+      </figure>
+
+      <p>
+        <code>page.js</code> のほかにも、役割が決まった特別なファイル名が
+        あります。代表的なのは次の 2 つです。
+      </p>
+      <ul>
+        <li><strong><code>layout.js</code></strong>：複数のページで共有する
+          外枠（ヘッダーやフッターなど）。フォルダ階層ごとに置け、
+          入れ子になる。</li>
+        <li><strong><code>[slug]</code> フォルダ（動的ルート）</strong>：
+          URL の一部（例: ブログ記事の ID）を変数として受け取る仕組み。</li>
+      </ul>
+
+      <h3>補足: App Router と Pages Router</h3>
+      <p>
+        Next.js の情報を調べると「App Router」「Pages Router」という
+        2 つの方式に出会います。<strong>Pages Router</strong> は
+        <code>pages</code> フォルダを使う従来方式、<strong>App Router</strong> は
+        バージョン 13（2022 年）で導入された <code>app</code> フォルダを使う
+        新方式で、後述の Server Components を前提としたつくりになっています。
+        現在は<strong>新規開発なら App Router が推奨</strong>で、このノートも
+        App Router を前提にしています。古い記事やコード例を読むときは、
+        どちらの方式の話なのかを最初に確認すると混乱しません。
+      </p>
+
+      <h2>Server Components と Client Components</h2>
+      <p>
+        App Router の中心概念が <strong>React Server Components</strong> です。
+        コンポーネントを「サーバで実行するもの」と「ブラウザで実行するもの」に
+        分け、<strong>既定ではすべてサーバコンポーネント</strong>として
+        扱われます。
+      </p>
+      <ul>
+        <li><strong>Server Component（既定）</strong>：サーバ側で実行され、
+          結果の HTML だけがブラウザへ届く。データベースアクセスなどを直接
+          書ける。その分の JavaScript はブラウザに送られないので軽い。</li>
+        <li><strong>Client Component</strong>：ファイルの先頭に
+          <code>"use client"</code> と書いたコンポーネント。ブラウザでも実行され、
+          クリックへの反応や状態（<code>useState</code>）など
+          <strong>対話的な動き</strong>を担当する。</li>
+      </ul>
+      <p>
+        「ページの大部分は軽いサーバコンポーネントで作り、ボタンなど
+        動きが必要な部品だけをクライアントコンポーネントにする」のが
+        基本方針です。たとえば次のカウンターは、状態とクリックを扱うので
+        クライアントコンポーネントにします（動作確認済み）。
+      </p>
+      <pre><code>// app/counter/page.js
+"use client";
+
+import { useState } from "react";
+
+export default function Counter() {
+  const [count, setCount] = useState(0);
+  return (
+    &lt;button onClick={() =&gt; setCount(count + 1)}&gt;
+      {count} 回クリックされました
+    &lt;/button&gt;
+  );
+}</code></pre>
+
+      <h2>動かしてみる — 最小構成の Next.js アプリ</h2>
+      <p>
+        新しくプロジェクトを始めるときは、公式のひな形生成コマンドを
+        使うのが標準的です（対話形式で TypeScript の有無などを選べます）。
+      </p>
+      <pre><code>npx create-next-app@latest my-app</code></pre>
+      <p>
+        ただし、仕組みを理解するには<strong>手で最小構成を作ってみる</strong>のが
+        一番です。必要なのは 3 つのパッケージと 2 つのファイルだけです。
+        以下は実際にビルド・表示を確認した手順です。
+      </p>
+      <pre><code>mkdir hello-next &amp;&amp; cd hello-next
+npm init -y
+npm install next react react-dom</code></pre>
+      <p>
+        <code>package.json</code> の <code>scripts</code> を次のようにしておくと
+        <code>npm run dev</code> などで起動できます。
+      </p>
+      <pre><code>{
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  }
+}</code></pre>
+      <p>
+        続いて、すべてのページの外枠になる <code>layout.js</code> と、
+        トップページの <code>page.js</code> を <code>app</code> フォルダに
+        作ります。
+      </p>
+      <pre><code>// app/layout.js — 全ページ共通の外枠
+export const metadata = { title: "はじめての Next.js" };
+
+export default function RootLayout({ children }) {
+  return (
+    &lt;html lang="ja"&gt;
+      &lt;body&gt;{children}&lt;/body&gt;
+    &lt;/html&gt;
+  );
+}</code></pre>
+      <pre><code>// app/page.js — トップページ（URL: /）
+export default function Home() {
+  return &lt;h1&gt;こんにちは、Next.js!&lt;/h1&gt;;
+}</code></pre>
+      <p>
+        ページを増やしたければフォルダを掘るだけです。
+      </p>
+      <pre><code>// app/about/page.js — URL: /about
+export default function About() {
+  return &lt;h1&gt;このサイトについて&lt;/h1&gt;;
+}</code></pre>
+      <p>
+        <code>npm run dev</code> で開発サーバが立ち上がり、
+        <code>http://localhost:3000</code> で表示を確認できます。本番用には
+        <code>npm run build</code> でビルドします。今回の例をビルドすると、
+        次のように<strong>すべてのページが自動的に静的生成</strong>
+        （作り置き）されました。リクエスト時に変わる要素がないページは、
+        Next.js が自動で最速の配信方式を選んでくれるわけです。
+      </p>
+      <pre><code>Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /about
+└ ○ /counter
+
+○  (Static)  prerendered as static content</code></pre>
+
+      <h2>Next.js が向いている場面・向いていない場面</h2>
+      <ul>
+        <li><strong>向いている</strong>：検索エンジンからの流入が大事なメディア・
+          EC サイト、表示速度を重視するサイト、ページごとに配信方式を
+          使い分けたいアプリ、React の知識を活かしてフルスタックに
+          作りたい場合。</li>
+        <li><strong>過剰かもしれない</strong>：数ページの静的なサイト
+          （素の HTML/CSS で十分）、社内向けの管理画面など SEO が不要な
+          完全な SPA（CSR だけで足りることも多い）。</li>
+        <li><strong>注意点</strong>：SSR や ISR を使うには Node.js が動く
+          サーバ環境が必要（静的生成だけなら通常の静的ホスティングでも可）。
+          また、フレームワークとしての規約（ファイル名や構成のルール）を
+          覚えるぶん、学習コストは素の React より少し増える。</li>
+      </ul>
+
+      <h2>まとめ</h2>
+      <p>
+        Next.js は、<strong>UI 部品づくりに特化した React に、
+        ルーティング・レンダリング・最適化・API といった
+        「サイトとして公開するために必要な残り全部」を足してくれる
+        フレームワーク</strong>です。HTML をいつ・どこで組み立てるかという
+        視点（CSR/SSR/SSG/ISR）を持つと、なぜ Next.js が必要とされるのかが
+        すっきり理解できます。
+      </p>
+      <p>
+        まずは <code>create-next-app</code> か本文の最小構成でアプリを起動し、
+        フォルダを掘ってページが増える感覚、<code>"use client"</code> の
+        有無による違いを手を動かして確かめてみてください。そのうえで
+        公式ドキュメント（下記）のチュートリアルに進むのがおすすめです。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://nextjs.org/docs">Next.js 公式ドキュメント</a></li>
+        <li><a href="https://github.com/vercel/next.js">vercel/next.js（公式リポジトリ）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
