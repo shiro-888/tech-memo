@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>画像分類のデファクトスタンダード — CNN から ViT・基盤モデルまで — tech-memo</title>
+  <meta name="description" content="画像分類に使える技術の見取り図。AlexNet 以降の歴史、転移学習という標準ワークフロー、ResNet・ViT などの定番モデル、CLIP・DINOv2 といった基盤モデルまで初心者向けに解説。">
+  <meta name="article:category" content="ai">
+  <meta name="article:summary" content="画像分類の「いま標準とされる技術」を整理。深層学習に至る歴史、事前学習＋転移学習という定番ワークフロー、ResNet・ViT・timm などの定番、CLIP・DINOv2 のようなゼロショット分類まで初心者向けに解説。">
+  <meta name="article:tags" content="画像分類,深層学習,転移学習,基盤モデル">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>画像分類のデファクトスタンダード — CNN から ViT・基盤モデルまで</h1>
+      <p class="note-meta">
+        <span class="badge badge--ai">AI</span>
+        <time datetime="2026-07-02">2026-07-02</time>
+      </p>
+
+      <p>
+        「この画像は猫か、犬か」を当てる<strong>画像分類（Image
+        Classification）</strong>は、コンピュータビジョンの最も基本的な
+        タスクです。基本ゆえに技術の選択肢も多く、「結局いま何を使うのが
+        標準なの？」が分かりにくい分野でもあります。このノートでは、
+        画像分類に使える技術を<strong>歴史 → 標準ワークフロー →
+        定番モデル → 基盤モデル</strong>の順に整理し、現在デファクト
+        スタンダードと言える組み合わせを初心者向けに解説します。
+      </p>
+      <p>
+        なお「何が標準か」は分野の動きとともに変わります。本ノートは
+        執筆時点（2026年）での定番の見取り図として読み、採用時は各技術の
+        公式情報で最新状況を確認してください。
+      </p>
+
+      <h2>画像分類とはどんなタスクか</h2>
+      <p>
+        画像分類は、<strong>画像1枚に対してラベル（クラス）を1つ以上
+        割り当てる</strong>タスクです。「どこに写っているか」は問わない点で、
+        位置（枠）まで当てる物体検出とは区別されます（検出については
+        <a href="../2026-07-01-yolo-history-and-latest-models/index.html">YOLO のノート</a>で
+        整理しています）。分類はあらゆる視覚タスクの土台でもあり、
+        後述するように、分類で強かったモデルの「特徴を捉える部分」は
+        検出やセグメンテーションの<strong>バックボーン</strong>（特徴抽出部）
+        として流用されます。だからこそ、この分野の定番を知っておく価値が
+        あります。
+      </p>
+
+      <h2>歴史の見取り図 — 手作り特徴量から基盤モデルへ</h2>
+      <p>
+        現在の標準を理解する近道は、大きな転換点を3つ押さえることです。
+      </p>
+      <ol>
+        <li><strong>2012年・深層学習への転換</strong>：それ以前は SIFT や HOG
+          といった<strong>人間が設計した特徴量</strong>を SVM などの分類器に
+          かける方式が主流でした。2012年、大規模画像データセット
+          <strong>ImageNet</strong> を使う競技会（ILSVRC）で、深層 CNN の
+          <strong>AlexNet</strong> が従来手法に大差をつけて優勝し、
+          以降は深層学習一色になります。</li>
+        <li><strong>2015年・「深さ」の壁の突破</strong>：<strong>ResNet</strong> が
+          <strong>残差接続</strong>（後述）で超深層ネットワークの学習を
+          可能にし、ILSVRC で優勝。以降10年にわたり定番であり続けます。</li>
+        <li><strong>2020年前後・Transformer と基盤モデル</strong>：自然言語処理で
+          成功した Transformer を画像に適用した <strong>ViT</strong>（Vision
+          Transformer）が登場。さらに画像とテキストを結びつけた
+          <strong>CLIP</strong> のような<strong>基盤モデル</strong>が現れ、
+          「学習なしでの分類（ゼロショット）」という新しい選択肢が
+          生まれました。</li>
+      </ol>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 740 240" style="--diagram-min-width: 520px" role="img" aria-labelledby="timeline-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="timeline-title">画像分類の歴史。手作り特徴量の時代から、2012年の AlexNet 以降の CNN 時代、2020年前後からの Transformer・基盤モデル時代へ</title>
+          <defs>
+            <marker id="timeline-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <path class="arrow" d="M20 190 L720 190" marker-end="url(#timeline-arrow)"/>
+          <text class="label label--muted" x="45"  y="212">〜2011</text>
+          <text class="label label--muted" x="225" y="212">2012</text>
+          <text class="label label--muted" x="385" y="212">2015</text>
+          <text class="label label--muted" x="525" y="212">2019</text>
+          <text class="label label--muted" x="630" y="212">2020〜</text>
+
+          <rect class="node" x="20" y="120" width="140" height="50" rx="8"/>
+          <text class="label" x="90" y="141" text-anchor="middle">手作り特徴量</text>
+          <text class="label label--muted" x="90" y="159" text-anchor="middle">SIFT＋SVM など</text>
+
+          <rect class="node node--accent" x="180" y="120" width="140" height="50" rx="8"/>
+          <text class="label" x="250" y="141" text-anchor="middle">AlexNet</text>
+          <text class="label label--muted" x="250" y="159" text-anchor="middle">深層学習へ転換</text>
+
+          <rect class="node node--accent" x="340" y="120" width="120" height="50" rx="8"/>
+          <text class="label" x="400" y="141" text-anchor="middle">ResNet</text>
+          <text class="label label--muted" x="400" y="159" text-anchor="middle">残差接続</text>
+
+          <rect class="node" x="470" y="120" width="145" height="50" rx="8"/>
+          <text class="label" x="542" y="141" text-anchor="middle">EfficientNet</text>
+          <text class="label label--muted" x="542" y="159" text-anchor="middle">効率的な拡大</text>
+
+          <rect class="node node--accent" x="590" y="30" width="130" height="50" rx="8"/>
+          <text class="label" x="655" y="51" text-anchor="middle">ViT</text>
+          <text class="label label--muted" x="655" y="69" text-anchor="middle">Transformer</text>
+
+          <rect class="node" x="590" y="95" width="130" height="50" rx="8"/>
+          <text class="label" x="655" y="116" text-anchor="middle">CLIP・DINOv2</text>
+          <text class="label label--muted" x="655" y="134" text-anchor="middle">基盤モデル</text>
+
+          <text class="label label--muted" x="30" y="40">CNN 中心の時代</text>
+          <text class="label label--muted" x="30" y="60">（VGG・GoogLeNet・ConvNeXt などもこの系譜）</text>
+        </svg>
+        <figcaption>図1: 画像分類の大きな流れ。2012年の AlexNet で深層学習へ転換し、2020年前後から Transformer 系と基盤モデルが加わった（年は代表的な発表時期の目安）。</figcaption>
+      </figure>
+
+      <h3>補足: 各時代の代表モデルをもう少しだけ</h3>
+      <ul>
+        <li><strong>AlexNet（2012年ごろ）</strong>：GPU を使った深層 CNN で
+          ILSVRC を制し、深層学習ブームの引き金になった記念碑的モデル。</li>
+        <li><strong>VGG / GoogLeNet（2014年ごろ）</strong>：より深く・より巧みな
+          構造へ。VGG のシンプルな設計は教材としても定番。</li>
+        <li><strong>ResNet（2015年ごろ）</strong>：層を深くしすぎると逆に学習
+          できなくなる問題を、<strong>残差接続（skip connection）</strong>＝
+          「入力を出力へ足し込む近道」で解決。100層超のネットワークを
+          実用にした。</li>
+        <li><strong>EfficientNet（2019年ごろ）</strong>：ネットワークの深さ・幅・
+          入力解像度をバランスよく拡大する方法（複合スケーリング）を提案し、
+          精度と計算量の効率を大きく改善。</li>
+        <li><strong>ViT（2020年ごろ）</strong>：画像を 16×16 ピクセルなどの
+          <strong>パッチ</strong>に切って単語の列のように扱い、Transformer に
+          入力する。大規模データで事前学習すると CNN を上回ることを示した。</li>
+        <li><strong>ConvNeXt（2022年ごろ）</strong>：ViT の設計思想を CNN に
+          逆輸入し、「CNN もまだ強い」ことを示したモデル。</li>
+      </ul>
+
+      <h2>デファクトその1: 「事前学習＋転移学習」というワークフロー</h2>
+      <p>
+        モデル名の前に、まず<strong>使い方の標準</strong>を押さえます。
+        現在、自分のタスクのために画像分類モデルを<strong>ゼロから学習する
+        ことはほぼありません</strong>。代わりに次の2段構えが定番です。
+      </p>
+      <ol>
+        <li><strong>事前学習（pre-training）</strong>：ImageNet のような大規模
+          データセットで学習済みのモデル（重み）を入手する。ここは自分では
+          やらず、公開されているものを使う。</li>
+        <li><strong>転移学習（transfer learning）</strong>：その学習済みモデルを
+          出発点に、自分のデータ（数百〜数千枚程度でも可）で
+          <strong>ファインチューニング</strong>（追加学習）する。分類クラス数に
+          合わせて最後の層だけ付け替えるのが典型。</li>
+      </ol>
+      <p>
+        事前学習で得た「輪郭や模様といった画像の一般的な特徴の捉え方」を
+        使い回せるため、少ないデータ・短い学習時間で高い精度に届きます。
+        これが画像分類における<strong>最大のデファクトスタンダード</strong>です。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 660 250" style="--diagram-min-width: 470px" role="img" aria-labelledby="transfer-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="transfer-title">転移学習の流れ。大規模データで事前学習したモデルの特徴抽出部を流用し、自分のデータで分類層を付け替えて追加学習する</title>
+          <defs>
+            <marker id="transfer-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <text class="label label--muted" x="20" y="25">① 事前学習（公開済みのものを使う）</text>
+          <rect class="node" x="20" y="40" width="130" height="55" rx="8"/>
+          <text class="label" x="85" y="62" text-anchor="middle">大規模データ</text>
+          <text class="label label--muted" x="85" y="80" text-anchor="middle">ImageNet など</text>
+
+          <rect class="node node--accent" x="230" y="40" width="180" height="55" rx="8"/>
+          <text class="label" x="320" y="62" text-anchor="middle">特徴抽出部</text>
+          <text class="label label--muted" x="320" y="80" text-anchor="middle">（バックボーン）</text>
+
+          <rect class="node" x="450" y="40" width="130" height="55" rx="8"/>
+          <text class="label" x="515" y="62" text-anchor="middle">分類層</text>
+          <text class="label label--muted" x="515" y="80" text-anchor="middle">1000クラス</text>
+
+          <path class="arrow" d="M150 67 L230 67" marker-end="url(#transfer-arrow)"/>
+          <path class="arrow" d="M410 67 L450 67" marker-end="url(#transfer-arrow)"/>
+
+          <path class="arrow" d="M320 95 L320 145" marker-end="url(#transfer-arrow)"/>
+          <text class="label label--muted" x="335" y="125">重みを流用</text>
+
+          <text class="label label--muted" x="20" y="140">② 転移学習（ここだけ自分でやる）</text>
+          <rect class="node" x="20" y="155" width="130" height="55" rx="8"/>
+          <text class="label" x="85" y="177" text-anchor="middle">自分のデータ</text>
+          <text class="label label--muted" x="85" y="195" text-anchor="middle">少量でOK</text>
+
+          <rect class="node node--accent" x="230" y="155" width="180" height="55" rx="8"/>
+          <text class="label" x="320" y="177" text-anchor="middle">特徴抽出部</text>
+          <text class="label label--muted" x="320" y="195" text-anchor="middle">（流用＋微調整）</text>
+
+          <rect class="node node--accent" x="450" y="155" width="130" height="55" rx="8"/>
+          <text class="label" x="515" y="177" text-anchor="middle">新しい分類層</text>
+          <text class="label label--muted" x="515" y="195" text-anchor="middle">自分のクラス数</text>
+
+          <path class="arrow" d="M150 182 L230 182" marker-end="url(#transfer-arrow)"/>
+          <path class="arrow" d="M410 182 L450 182" marker-end="url(#transfer-arrow)"/>
+        </svg>
+        <figcaption>図2: 事前学習＋転移学習。特徴抽出部を流用し、最後の分類層を自分のクラス数に付け替えて追加学習するのが定番。</figcaption>
+      </figure>
+
+      <h2>デファクトその2: 定番モデル</h2>
+      <p>
+        次に「どのモデル（アーキテクチャ）を選ぶか」です。役割別に
+        定番を挙げます。
+      </p>
+      <ul>
+        <li><strong>ResNet-50 — 共通のものさし</strong>：発表から10年経った今も、
+          論文のベースラインや実務の最初の一手として最も広く使われる
+          「基準器」。枯れていて情報も豊富、迷ったらまずこれ。</li>
+        <li><strong>EfficientNet / MobileNet 系 — 軽さ重視</strong>：
+          スマホ・組込みなど計算資源が限られる環境の定番。精度と計算量の
+          バランスを取りやすい。</li>
+        <li><strong>ViT 系 — 大規模データ・高精度狙い</strong>：事前学習が
+          強力なら CNN を超える性能。後述の基盤モデルの多くも ViT が土台。
+          改良版として、画像を階層的に扱う Swin Transformer なども有名。</li>
+        <li><strong>ConvNeXt — モダンな CNN</strong>：ViT 世代の知見を
+          取り込んだ CNN。CNN の扱いやすさと新しい設計の良いとこ取りを
+          狙える。</li>
+      </ul>
+      <p>
+        重要なのは、「最新・最強」を追うより<strong>事前学習の質と
+        自分のデータへの適合</strong>のほうが精度に効きやすい、という
+        実務上の経験則です。まず ResNet-50 か小さめの ViT で基準値を作り、
+        必要に応じて乗り換えるのが定石です。
+      </p>
+
+      <h2>デファクトその3: ツールとエコシステム</h2>
+      <p>
+        実装面のデファクトはかなりはっきりしています。
+      </p>
+      <ul>
+        <li><strong>PyTorch</strong>：研究・実務とも現在の主流の深層学習
+          フレームワーク。</li>
+        <li><strong>torchvision</strong>：PyTorch 公式のビジョン用ライブラリ。
+          定番モデルと ImageNet 学習済み重み、前処理がそろう。</li>
+        <li><strong>timm（pytorch-image-models）</strong>：画像モデルの
+          事実上の標準コレクション。執筆時点で
+          <strong>1,288 種類</strong>のアーキテクチャを収録しており
+          （手元の <code>timm.list_models()</code> で確認）、最新モデルも
+          いち早く使える。Hugging Face が維持している。</li>
+        <li><strong>Hugging Face Hub</strong>：学習済み重みの配布場所として
+          定着。timm や Transformers ライブラリから直接読み込める。</li>
+      </ul>
+      <p>
+        学習済みモデルでの推論は数行で書けます。以下は torchvision で
+        ResNet-50 を使う例です（PyTorch 2.12 / torchvision 0.27 で
+        一連の流れの動作を確認。実行には学習済み重みの初回ダウンロードが
+        発生します）。
+      </p>
+      <pre><code># torchvision で学習済み ResNet-50 を使った画像分類
+import torch
+from PIL import Image
+from torchvision.models import resnet50, ResNet50_Weights
+
+weights = ResNet50_Weights.IMAGENET1K_V2
+model = resnet50(weights=weights)   # ImageNet 学習済みの重みを読み込む
+model.eval()
+
+preprocess = weights.transforms()   # このモデル用の前処理（リサイズ・正規化）
+img = Image.open("cat.jpg")
+batch = preprocess(img).unsqueeze(0)  # (3,224,224) → (1,3,224,224)
+
+with torch.no_grad():
+    probs = model(batch).softmax(dim=1)
+
+top5 = probs.topk(5)
+categories = weights.meta["categories"]  # ImageNet の 1000 クラス名
+for p, idx in zip(top5.values[0], top5.indices[0]):
+    print(f"{categories[idx]}: {p.item():.3f}")</code></pre>
+      <p>
+        timm を使うと、同じ書き方のまま 1,000 種類超のモデルを
+        切り替えられます。転移学習の起点にも便利です。
+      </p>
+      <pre><code># timm: モデル名を変えるだけで ViT でも ConvNeXt でも同じ書き方
+import timm
+
+# num_classes を指定すると分類層が自分のクラス数に付け替わる（転移学習の起点）
+model = timm.create_model("vit_base_patch16_224",
+                          pretrained=True, num_classes=10)
+model.eval()
+
+cfg = timm.data.resolve_model_data_config(model)
+transform = timm.data.create_transform(**cfg, is_training=False)</code></pre>
+
+      <h2>新しい選択肢: 基盤モデルとゼロショット分類</h2>
+      <p>
+        ここまでの「事前学習＋転移学習」に加えて、近年は<strong>基盤モデル
+        （foundation model）</strong>という選択肢が加わりました。
+        大量のデータで学習された汎用モデルを、ほぼそのまま使う発想です。
+        画像分類で特に重要なのが次の2つです。
+      </p>
+
+      <h3>CLIP — テキストと画像を同じ土俵に載せる</h3>
+      <p>
+        <strong>CLIP</strong>（OpenAI、2021年ごろ）は、大量の
+        「画像とその説明文」のペアから、<strong>画像とテキストを同じ
+        ベクトル空間に写像する</strong>ことを学んだモデルです。これにより、
+        分類したいクラス名を「猫の写真」「犬の写真」のような
+        <strong>テキストとして与えるだけで、追加学習なしに分類</strong>
+        できます。これを<strong>ゼロショット分類</strong>と呼びます。
+        ラベル付きデータを集める前に「まず試せる」のが革命的な点です。
+        同じ発想の後続として、Google の SigLIP なども知られています。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 740 260" style="--diagram-min-width: 520px" role="img" aria-labelledby="clip-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="clip-title">CLIP によるゼロショット分類。画像は画像エンコーダで、各クラス名のテキストはテキストエンコーダでベクトル化し、最も類似度が高いクラスを答えとする</title>
+          <defs>
+            <marker id="clip-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="node" x="20" y="30" width="120" height="55" rx="8"/>
+          <text class="label" x="80" y="62" text-anchor="middle">入力画像</text>
+
+          <rect class="node node--accent" x="200" y="30" width="150" height="55" rx="8"/>
+          <text class="label" x="275" y="52" text-anchor="middle">画像エンコーダ</text>
+          <text class="label label--muted" x="275" y="70" text-anchor="middle">ViT など</text>
+
+          <rect class="node" x="20" y="160" width="120" height="70" rx="8"/>
+          <text class="label" x="80" y="185" text-anchor="middle">クラス名の文</text>
+          <text class="label label--muted" x="80" y="203" text-anchor="middle">「猫の写真」</text>
+          <text class="label label--muted" x="80" y="219" text-anchor="middle">「犬の写真」…</text>
+
+          <rect class="node node--accent" x="200" y="168" width="150" height="55" rx="8"/>
+          <text class="label" x="275" y="190" text-anchor="middle">テキスト</text>
+          <text class="label" x="275" y="208" text-anchor="middle">エンコーダ</text>
+
+          <rect class="node" x="410" y="95" width="150" height="70" rx="8"/>
+          <text class="label" x="485" y="122" text-anchor="middle">類似度を計算</text>
+          <text class="label label--muted" x="485" y="142" text-anchor="middle">同じベクトル空間</text>
+
+          <rect class="node node--accent" x="620" y="95" width="110" height="70" rx="8"/>
+          <text class="label" x="675" y="120" text-anchor="middle">答え</text>
+          <text class="label label--muted" x="675" y="140" text-anchor="middle">最も近い</text>
+          <text class="label label--muted" x="675" y="156" text-anchor="middle">クラス</text>
+
+          <path class="arrow" d="M140 57 L200 57" marker-end="url(#clip-arrow)"/>
+          <path class="arrow" d="M140 195 L200 195" marker-end="url(#clip-arrow)"/>
+          <path class="arrow" d="M350 57 L420 100" marker-end="url(#clip-arrow)"/>
+          <path class="arrow" d="M350 195 L420 160" marker-end="url(#clip-arrow)"/>
+          <path class="arrow" d="M560 130 L620 130" marker-end="url(#clip-arrow)"/>
+        </svg>
+        <figcaption>図3: CLIP のゼロショット分類。画像とクラス名のテキストを同じ空間のベクトルにして、いちばん似ているクラスを選ぶ。</figcaption>
+      </figure>
+
+      <h3>DINOv2 — ラベルなしで学んだ「万能の眼」</h3>
+      <p>
+        <strong>DINOv2</strong>（Meta、2023年ごろ）は、ラベルなしの大量画像から
+        <strong>自己教師あり学習</strong>で画像の特徴表現を学んだモデルです。
+        テキストは使いませんが、得られる特徴ベクトルが非常に汎用的で、
+        <strong>特徴を取り出して軽い分類器（線形分類器など）を載せるだけ</strong>で
+        高い精度が出ることで知られます。「バックボーンは凍結して使い回す」
+        という、基盤モデル時代の使い方を象徴する存在です。
+      </p>
+
+      <h2>結局どれを使う？ — 状況別の定石</h2>
+      <ul>
+        <li><strong>ラベル付きデータがまだ無い</strong>：CLIP 系の
+          <strong>ゼロショット分類</strong>をまず試す。クラス名を工夫する
+          だけで実用ラインに乗ることも多い。</li>
+        <li><strong>少量〜中量のラベル付きデータがある</strong>：定番の
+          <strong>事前学習済みモデル＋ファインチューニング</strong>
+          （ResNet-50 や ViT を timm で）。または DINOv2 の特徴＋軽い分類器。</li>
+        <li><strong>スマホ・エッジで動かす</strong>：MobileNet・EfficientNet 系の
+          軽量モデル＋転移学習。必要なら量子化などの軽量化を検討。</li>
+        <li><strong>精度を極めたい・データが大量にある</strong>：大きめの
+          ViT 系や ConvNeXt を検討。ただし計算資源と相談。</li>
+        <li><strong>共通の注意</strong>：モデルごとに<strong>ライセンス</strong>
+          （商用可否）と、事前学習データに由来する偏りの影響を確認すること。</li>
+      </ul>
+
+      <h2>まとめ</h2>
+      <p>
+        画像分類のデファクトスタンダードは、一言でいえば
+        「<strong>PyTorch ＋ timm/torchvision で、ImageNet などで事前学習済みの
+        定番モデル（ResNet-50 や ViT）を転移学習する</strong>」です。
+        そこに近年、<strong>CLIP のゼロショット分類</strong>と
+        <strong>DINOv2 のような汎用特徴抽出</strong>という基盤モデル由来の
+        選択肢が加わり、「ラベルを集める前に試す」ことができるように
+        なりました。
+      </p>
+      <p>
+        手を動かすなら、本文のコード例のように学習済み ResNet-50 の推論から
+        始めて、次に自分のデータでのファインチューニング、そして CLIP の
+        ゼロショットとの比較へ進むと、この分野の全体像が体感できるはずです。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://github.com/huggingface/pytorch-image-models">timm（pytorch-image-models）公式リポジトリ</a></li>
+        <li><a href="https://github.com/pytorch/vision">torchvision（PyTorch 公式ビジョンライブラリ）</a></li>
+        <li><a href="https://github.com/openai/CLIP">CLIP 公式リポジトリ（OpenAI）</a></li>
+        <li><a href="https://github.com/facebookresearch/dinov2">DINOv2 公式リポジトリ（Meta AI Research）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
