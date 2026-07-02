@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DINOv2 とは — ラベルもテキストも使わずに学ぶ「万能の視覚特徴」 — tech-memo</title>
+  <meta name="description" content="Meta の視覚基盤モデル DINOv2 を初心者向けに解説。自己蒸留による自己教師あり学習の仕組み、凍結バックボーンとしての強み、テキスト非対応などの弱み、Apache 2.0 ライセンス、torch.hub・timm での使い方までを整理。">
+  <meta name="article:category" content="ai">
+  <meta name="article:summary" content="Meta の視覚基盤モデル DINOv2 を、自己蒸留による自己教師あり学習の仕組み・凍結バックボーンとしての強み・テキスト非対応などの弱み・Apache 2.0 ライセンス・torch.hub / timm での使い方まで初心者向けに解説。">
+  <meta name="article:tags" content="DINOv2,自己教師あり学習,基盤モデル,ViT">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>DINOv2 とは — ラベルもテキストも使わずに学ぶ「万能の視覚特徴」</h1>
+      <p class="note-meta">
+        <span class="badge badge--ai">AI</span>
+        <time datetime="2026-07-02">2026-07-02</time>
+      </p>
+
+      <p>
+        <strong>DINOv2</strong>（ディノ・ブイツー）は、Meta AI が公開した
+        <strong>視覚（画像）の基盤モデル</strong>です。ひとことで言うと
+        「<strong>ラベルもテキストも使わず、大量の画像だけから
+        『使い回せる視覚特徴』を学んだモデル</strong>」。画像分類・
+        セグメンテーション・深度推定など、さまざまなタスクの土台
+        （バックボーン）としてそのまま流用できるのが最大の売りです。
+      </p>
+      <p>
+        このノートでは、DINOv2 の<strong>仕組み・強み・弱み・ライセンス・
+        使い方</strong>を初心者向けに整理します。前提となる周辺知識
+        （自己教師あり学習など）も補足しながら進めます。画像分類全体の
+        中での位置づけは
+        <a href="../2026-07-02-image-classification-standards/index.html">画像分類のデファクトスタンダードのノート</a>も
+        あわせて読むと分かりやすいはずです。なお細部は情報が更新される
+        ことがあるため、採用時は公式リポジトリで最新の事実を確認して
+        ください。
+      </p>
+
+      <h2>前提: 自己教師あり学習（SSL）とは</h2>
+      <p>
+        DINOv2 を理解する鍵は<strong>自己教師あり学習（Self-Supervised
+        Learning, SSL）</strong>です。通常の教師あり学習は「画像＋正解ラベル
+        （猫・犬…）」のペアを大量に必要とします。しかしラベル付けは高コスト。
+        SSL は<strong>ラベルなしのデータそのものから学習の手がかりを
+        自動生成する</strong>やり方で、この「ラベル集めの壁」を回避します。
+      </p>
+      <p>
+        DINOv2 の場合、手がかりは「<strong>同じ画像を別々に加工した2枚は、
+        中身は同じはず</strong>」というシンプルな事実です。1枚の画像を
+        切り抜き・色変換などで2通りに加工し、「どちらも似た特徴になるように」
+        モデルを学習させます。正解ラベルは一切使いません。
+      </p>
+
+      <h2>仕組み — 自己蒸留（student と teacher）</h2>
+      <p>
+        DINOv2 の学習の中核は<strong>自己蒸留（self-distillation）</strong>と
+        呼ばれる方式です。<strong>student（生徒）</strong>と
+        <strong>teacher（教師）</strong>という2つのネットワークを用意し、
+        生徒が教師の出力に近づくよう学習します。ポイントは、教師も生徒と
+        同じものから作られる（外部の正解を持たない）ことです。
+      </p>
+      <ol>
+        <li>1枚の画像から、加工の異なる2つの<strong>ビュー</strong>を作る。</li>
+        <li>一方を teacher に、もう一方を student に入力し、それぞれ特徴
+          （出力）を得る。</li>
+        <li>student の出力が teacher の出力に近づくよう、student の重みを
+          更新する。</li>
+        <li>teacher の重みは直接学習せず、<strong>student の重みを
+          ゆっくり平均して更新</strong>する（EMA＝指数移動平均）。teacher が
+          安定した「お手本」役になる。</li>
+      </ol>
+      <p>
+        この仕組みは、Meta が以前公開した <strong>DINO</strong>（初代）の
+        考え方を受け継いだものです。「DINO」という名前自体、この
+        <strong>自己蒸留（self-<u>di</u>stillation with <u>no</u> labels）</strong>に
+        由来するとされます。DINOv2 はこれを、後述の大規模で高品質な
+        データセットと組み合わせ、特徴の質を大きく引き上げました。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 680 300" style="--diagram-min-width: 490px" role="img" aria-labelledby="distill-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="distill-title">DINOv2 の自己蒸留。1枚の画像から2つの加工ビューを作り、student と teacher に入力し、student の出力が teacher に近づくよう学習する。teacher は student の重みの移動平均で更新される</title>
+          <defs>
+            <marker id="distill-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="node" x="20" y="120" width="110" height="60" rx="8"/>
+          <text class="label" x="75" y="146" text-anchor="middle">1枚の画像</text>
+          <text class="label label--muted" x="75" y="164" text-anchor="middle">ラベルなし</text>
+
+          <rect class="node" x="180" y="40"  width="110" height="55" rx="8"/>
+          <rect class="node" x="180" y="205" width="110" height="55" rx="8"/>
+          <text class="label" x="235" y="63"  text-anchor="middle">ビューA</text>
+          <text class="label label--muted" x="235" y="81" text-anchor="middle">加工1</text>
+          <text class="label" x="235" y="228" text-anchor="middle">ビューB</text>
+          <text class="label label--muted" x="235" y="246" text-anchor="middle">加工2</text>
+
+          <rect class="node node--accent" x="350" y="40"  width="150" height="55" rx="8"/>
+          <rect class="node node--accent" x="350" y="205" width="150" height="55" rx="8"/>
+          <text class="label" x="425" y="63"  text-anchor="middle">teacher</text>
+          <text class="label label--muted" x="425" y="81" text-anchor="middle">お手本（EMA）</text>
+          <text class="label" x="425" y="228" text-anchor="middle">student</text>
+          <text class="label label--muted" x="425" y="246" text-anchor="middle">学習される側</text>
+
+          <rect class="node" x="555" y="120" width="105" height="60" rx="8"/>
+          <text class="label" x="607" y="146" text-anchor="middle">出力を</text>
+          <text class="label" x="607" y="164" text-anchor="middle">近づける</text>
+
+          <path class="arrow" d="M130 140 L180 80"  marker-end="url(#distill-arrow)"/>
+          <path class="arrow" d="M130 160 L180 225" marker-end="url(#distill-arrow)"/>
+          <path class="arrow" d="M290 67  L350 67"  marker-end="url(#distill-arrow)"/>
+          <path class="arrow" d="M290 232 L350 232" marker-end="url(#distill-arrow)"/>
+          <path class="arrow" d="M500 67  L555 135" marker-end="url(#distill-arrow)"/>
+          <path class="arrow" d="M500 232 L555 165" marker-end="url(#distill-arrow)"/>
+
+          <path class="arrow" d="M425 205 L425 95" marker-end="url(#distill-arrow)"/>
+          <text class="label label--muted" x="437" y="153">重みを平均</text>
+          <text class="label label--muted" x="437" y="169">して teacher へ</text>
+        </svg>
+        <figcaption>図1: 自己蒸留の流れ。同じ画像の2つの加工ビューを teacher / student に入力し、student を teacher に近づける。teacher は student の重みの移動平均（EMA）で更新される。</figcaption>
+      </figure>
+
+      <h2>学習データとモデルの品ぞろえ</h2>
+      <p>
+        DINOv2 の特徴の質を支えているのが、<strong>約1億4200万枚（142M）</strong>の
+        画像から成る大規模データセット（LVD-142M）です。単に集めるだけでなく、
+        <strong>重複除去や選別で品質を高めたキュレーション</strong>が施されて
+        いる点が、初代 DINO からの大きな進歩とされています。
+      </p>
+      <p>
+        まず巨大なモデルを学習し、その知識を小さなモデルへ受け渡す
+        <strong>蒸留（distillation）</strong>によって、用途に応じて選べる
+        複数サイズが提供されています（いずれも土台は
+        <strong>ViT</strong>＝Vision Transformer、パッチサイズ14）。
+      </p>
+      <ul>
+        <li><strong>ViT-S/14</strong>：約 2,100 万パラメータ。軽量で試しやすい。</li>
+        <li><strong>ViT-B/14</strong>：約 8,600 万パラメータ。標準的な選択。</li>
+        <li><strong>ViT-L/14</strong>：約 3 億パラメータ。高精度寄り。</li>
+        <li><strong>ViT-g/14</strong>：約 11 億パラメータ。最大・最高精度クラス。</li>
+      </ul>
+      <p>
+        「まず ViT-S か ViT-B で試し、精度が要れば大きいものへ」という
+        選び方が現実的です。
+      </p>
+
+      <h2>強み — なぜ「万能」と言われるのか</h2>
+      <ul>
+        <li><strong>凍結したまま使える汎用特徴</strong>：DINOv2 の最大の特徴は、
+          モデルを<strong>ファインチューニング（追加学習）せず「凍結」した
+          まま</strong>、出力する特徴ベクトルの上に軽い分類器
+          （線形分類器など）を載せるだけで高い精度が出ること。学習コストを
+          大きく減らせます。</li>
+        <li><strong>タスクを選ばない</strong>：分類だけでなく、
+          <strong>セマンティックセグメンテーション・深度推定</strong>など、
+          性質の異なるタスクにも同じ特徴が流用できます。だから「万能の眼」と
+          表現されます。</li>
+        <li><strong>密な（ピクセルに近い）特徴が得られる</strong>：画像全体を
+          1つのベクトルにするだけでなく、画像内の各部分の特徴も得られるため、
+          位置が重要なタスク（セグメンテーション等）と相性が良い。</li>
+        <li><strong>ラベル不要でスケールする</strong>：ラベル付けの制約が
+          ないので、大量データで学習しやすい。</li>
+      </ul>
+      <p>
+        つまり DINOv2 は、「<strong>強力な特徴抽出器を1つ用意し、下流の
+        タスクごとに軽いヘッドを付け替える</strong>」という、基盤モデル時代の
+        使い方を体現する存在です。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 640 250" style="--diagram-min-width: 460px" role="img" aria-labelledby="frozen-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="frozen-title">凍結した DINOv2 バックボーンから得た特徴の上に、分類・セグメンテーション・深度推定など用途別の軽いヘッドを付け替えて使う</title>
+          <defs>
+            <marker id="frozen-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="node" x="20" y="95" width="110" height="60" rx="8"/>
+          <text class="label" x="75" y="130" text-anchor="middle">入力画像</text>
+
+          <rect class="node node--accent" x="180" y="85" width="180" height="80" rx="10"/>
+          <text class="label" x="270" y="118" text-anchor="middle">DINOv2</text>
+          <text class="label label--muted" x="270" y="138" text-anchor="middle">凍結（学習しない）</text>
+
+          <rect class="node" x="440" y="20"  width="180" height="50" rx="8"/>
+          <rect class="node" x="440" y="100" width="180" height="50" rx="8"/>
+          <rect class="node" x="440" y="180" width="180" height="50" rx="8"/>
+          <text class="label" x="530" y="42"  text-anchor="middle">分類ヘッド</text>
+          <text class="label label--muted" x="530" y="60" text-anchor="middle">クラスを当てる</text>
+          <text class="label" x="530" y="122" text-anchor="middle">セグメンヘッド</text>
+          <text class="label label--muted" x="530" y="140" text-anchor="middle">領域を塗り分け</text>
+          <text class="label" x="530" y="202" text-anchor="middle">深度ヘッド</text>
+          <text class="label label--muted" x="530" y="220" text-anchor="middle">奥行きを推定</text>
+
+          <path class="arrow" d="M130 125 L180 125" marker-end="url(#frozen-arrow)"/>
+          <path class="arrow" d="M360 110 L440 50"  marker-end="url(#frozen-arrow)"/>
+          <path class="arrow" d="M360 125 L440 125" marker-end="url(#frozen-arrow)"/>
+          <path class="arrow" d="M360 140 L440 200" marker-end="url(#frozen-arrow)"/>
+          <text class="label label--muted" x="270" y="185" text-anchor="middle">特徴ベクトル</text>
+        </svg>
+        <figcaption>図2: DINOv2 の使い方。バックボーンは凍結したまま、用途に応じた軽いヘッドだけを学習して付け替える。</figcaption>
+      </figure>
+
+      <h2>弱み・注意点</h2>
+      <ul>
+        <li><strong>テキストは扱えない</strong>：DINOv2 は画像だけで学習して
+          いるため、<strong>CLIP のような「テキストで指定したクラスを
+          ゼロショット分類」ができません</strong>。分類に使うには、
+          少量でも<strong>ラベル付きデータで軽い分類器を学習</strong>する
+          ステップが必要です（CLIP との違いは後述）。</li>
+        <li><strong>大きいモデルは重い</strong>：ViT-L / ViT-g は高精度な反面、
+          計算資源とメモリを要します。エッジ用途には ViT-S / ViT-B や
+          軽量化の検討を。</li>
+        <li><strong>入力解像度が大きめ</strong>：パッチ14の ViT を高めの解像度で
+          使う設計のため、素朴に使うと計算量が増えがちです（実装既定の
+          入力サイズは大きめ）。</li>
+        <li><strong>特徴マップのノイズ（アーティファクト）</strong>：初期の
+          DINOv2 では、注目度マップに不自然な高反応点が出ることが報告され、
+          これを緩和する改良版（後述の registers）が提供されています。</li>
+        <li><strong>用途別ライセンスの違い</strong>：後述のとおり、派生の一部は
+          非商用ライセンスです。使うモデルのライセンスを個別に確認する
+          必要があります。</li>
+      </ul>
+
+      <h3>補足: DINOv2 with registers</h3>
+      <p>
+        上記のアーティファクト問題に対し、Transformer に
+        <strong>レジスタ（registers）</strong>と呼ばれる<strong>計算用の
+        予備トークンを数個追加する</strong>改良が提案されました
+        （「Vision Transformers Need Registers」の考え方）。これにより
+        特徴マップが整い、わずかな性能向上も得られるとされます。DINOv2 では
+        <code>_reg</code> 付きの重み（例: <code>dinov2_vitb14_reg</code>）として
+        提供されています。特に密な特徴を使う用途では、registers 版を選ぶと
+        よい場合があります。</p>
+
+      <h2>ライセンス</h2>
+      <p>
+        DINOv2 の<strong>メインのコードとモデルは Apache License 2.0</strong>で
+        提供されており、<strong>商用利用も可能</strong>です（利用時は
+        ライセンス全文と条件を必ず自分で確認してください）。これは、
+        研究用途に制限されることの多い基盤モデルの中では扱いやすい部類です。
+      </p>
+      <blockquote>
+        DINOv2 の LICENSE ファイル冒頭は「Apache License, Version 2.0」。
+      </blockquote>
+      <p>
+        ただし注意点として、<strong>同じリポジトリ配下でも派生プロジェクトは
+        ライセンスが異なる</strong>ことがあります。たとえば医療・顕微鏡画像
+        向けなどの派生（Cell-DINO、XRay-DINO 等）は非商用ライセンスと
+        案内されています。<strong>「どのモデル／重みを使うか」ごとに
+        ライセンスを確認</strong>するのが安全です。
+      </p>
+
+      <h2>使い方</h2>
+      <p>
+        公式には <strong>PyTorch の <code>torch.hub</code></strong> から重みを
+        読み込めます。次は公式リポジトリで案内されている読み込み方法です。
+      </p>
+      <pre><code># 公式: torch.hub から DINOv2 の学習済みモデルを読み込む
+import torch
+
+# ViT-S/14（軽量）。他に dinov2_vitb14 / vitl14 / vitg14 など
+model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
+
+# registers 版（特徴マップが整う改良版）
+model_reg = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14_reg')</code></pre>
+      <p>
+        画像モデルの定番ライブラリ <strong>timm</strong> からも同等の
+        アーキテクチャを扱えます。以下は「<strong>凍結した DINOv2 で
+        特徴を取り出し、その上に線形分類器を1枚載せる</strong>」という
+        典型的な使い方の例です（timm 1.0 系でモデル構築・前処理・
+        特徴抽出・線形ヘッドまでの流れを実際に動作確認。学習済み重みの
+        取得には別途ダウンロードが発生します）。
+      </p>
+      <pre><code># timm: DINOv2 を「特徴抽出器」として使う（num_classes=0 でヘッドを外す）
+import torch, timm
+
+backbone = timm.create_model(
+    "vit_base_patch14_dinov2", pretrained=True, num_classes=0)
+backbone.eval()
+
+# DINOv2 用の正しい前処理（リサイズ・正規化）を自動で用意
+cfg = timm.data.resolve_model_data_config(backbone)
+transform = timm.data.create_transform(**cfg, is_training=False)
+
+# 画像 → 特徴ベクトル（ViT-B/14 なら 768 次元）
+# feat = backbone(transform(img).unsqueeze(0))  # 形状: (1, 768)
+
+# その特徴に、自分のクラス数の線形分類器を1枚載せる（これだけ学習する）
+head = torch.nn.Linear(768, 10)  # 10 クラス分類の例</code></pre>
+
+      <h2>CLIP との使い分け</h2>
+      <p>
+        画像の基盤モデルとしてよく比較されるのが CLIP です。役割が違うので、
+        目的で選びます。
+      </p>
+      <ul>
+        <li><strong>ラベルがまだ無い／テキストで柔軟に分類したい</strong> →
+          <strong>CLIP</strong>。クラス名の文を与えるだけのゼロショット分類が
+          できる。</li>
+        <li><strong>強い視覚特徴が欲しい／分類以外（セグメン・深度など）にも
+          使いたい／少量のラベルで下流タスクを作りたい</strong> →
+          <strong>DINOv2</strong>。凍結特徴＋軽いヘッドが強力。</li>
+      </ul>
+      <p>
+        両者は排他ではなく、目的に応じて併用・比較するのが実務的です。</p>
+
+      <h2>まとめ</h2>
+      <p>
+        DINOv2 は、<strong>ラベルもテキストも使わない自己蒸留による
+        自己教師あり学習</strong>で、<strong>凍結したまま多用途に使える
+        汎用視覚特徴</strong>を獲得した基盤モデルです。強みは「軽いヘッドを
+        載せるだけで分類・セグメン・深度など幅広く高精度」、弱みは
+        「テキスト非対応（ゼロショット分類は不可）」「大型モデルは重い」など。
+        <strong>メインのモデルは Apache 2.0 で商用利用も可能</strong>ですが、
+        派生はライセンスが異なるため個別確認が必要です。使い方は
+        <code>torch.hub</code> や timm から数行で始められます。
+      </p>
+      <p>
+        まずは ViT-S / ViT-B を凍結して特徴を取り出し、手元のデータで
+        線形分類器を学習するところから試すと、この「万能の眼」の使い勝手を
+        体感できるはずです。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://github.com/facebookresearch/dinov2">DINOv2 公式リポジトリ（Meta AI Research）</a></li>
+        <li><a href="https://github.com/facebookresearch/dinov2/blob/main/LICENSE">DINOv2 の LICENSE（Apache License 2.0）</a></li>
+        <li><a href="https://github.com/huggingface/pytorch-image-models">timm（pytorch-image-models）— DINOv2 も利用可能</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
