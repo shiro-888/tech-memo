@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>エージェントオーケストレーション入門 — 複数の AI に役割分担させて1つの仕事を仕上げる — tech-memo</title>
+  <meta name="description" content="複数の AI エージェントが役割分担・連携して1つのタスクを遂行する「エージェントオーケストレーション」を、単一エージェントとの違い・代表的な構成パターン・このノート自身の制作フローを実例に、初心者向けに周辺知識つきで解説する技術ノート。">
+  <meta name="article:category" content="ai">
+  <meta name="article:summary" content="複数の AI エージェントに役割分担させて1つの仕事を仕上げる「エージェントオーケストレーション」を、単一エージェントとの違い・構成パターン・落とし穴まで、マルチエージェント未経験のエンジニア向けに平易に整理。">
+  <meta name="article:tags" content="エージェント,LLM,オーケストレーション,マルチエージェント,ワークフロー">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>エージェントオーケストレーション入門 — 複数の AI に役割分担させて1つの仕事を仕上げる</h1>
+      <p class="note-meta">
+        <span class="badge badge--ai">AI</span>
+        <time datetime="2026-07-03">2026-07-03</time>
+      </p>
+
+      <p>
+        1体の万能な AI にすべてを丸投げするのではなく、<strong>役割の違う複数の AI
+        （エージェント）に仕事を分担させ、それらを1つのタスクとしてまとめ上げる</strong>——
+        この考え方を<strong>エージェントオーケストレーション（Agent Orchestration）</strong>と
+        呼びます。オーケストラの指揮者が各パートをまとめて1つの曲に仕立てるのになぞらえた言葉です。
+      </p>
+      <p>
+        このノートは、<strong>ソフトウェア開発の基礎はあるけれど、複数の AI を連携させる
+        「マルチエージェント」の仕組みは初めて</strong>という方を対象にしています。読み終える頃には、
+        なぜ役割分担が有効なのか、どんな組み合わせ方（パターン）があるのか、そして
+        <strong>どんな落とし穴に気をつければよいか</strong>の全体像がつかめることを目標にします。
+        LLM やエージェントといった用語はそのつど「用語補足」で説明するので、AI の詳細を知らなくても
+        読み進められるはずです。おもしろいことに、<strong>この記事自身も複数エージェントの分業で
+        書かれています</strong>。その制作フローも後半で実例として紹介します。
+      </p>
+
+      <h2>エージェントとオーケストレーションとは</h2>
+      <p>
+        まず土台となる言葉を、身近なイメージに置き換えて整理しておきましょう。
+      </p>
+      <ul>
+        <li><strong>LLM（大規模言語モデル）</strong>：大量の文章から言葉のパターンを学習し、
+          与えられた指示（プロンプト）に対して自然な文章を返す AI。ChatGPT や Claude の
+          頭脳にあたる部分です。</li>
+        <li><strong>エージェント</strong>：LLM に<strong>「道具（ツール）を使う手足」</strong>を
+          付けたもの。文章を返すだけでなく、ファイルを読み書きしたり、コマンドを実行したり、
+          Web を検索したりと、<strong>目標達成のために自分で手順を選んで動く</strong> AI を指します。</li>
+        <li><strong>ツール利用（ツールコール）</strong>：エージェントが「ファイルを読む」「検索する」
+          といった外部の道具を呼び出すこと。<strong>用語補足：</strong>LLM 自体は文章を生成するだけなので、
+          実際の操作は「この道具をこの引数で使いたい」という要求を出し、その結果を受け取って
+          次の判断に使います。この繰り返しでエージェントは作業を進めます。</li>
+        <li><strong>サブエージェント</strong>：大きな仕事の一部分を担当する、専門特化した子エージェント。
+          「調査担当」「レビュー担当」のように役割を絞って使います。</li>
+        <li><strong>オーケストレーション（指揮・編成）</strong>：複数のエージェントを
+          <strong>いつ・どの順で・どう連携させるか</strong>を調整し、全体を1つの成果へまとめること。
+          この調整役を担うエージェントを<strong>オーケストレーター（指揮者）</strong>と呼びます。</li>
+      </ul>
+      <p>
+        つまりエージェントオーケストレーションとは、<strong>「専門の異なる複数のエージェントを、
+        指揮役がまとめて1つのタスクを完遂させる仕組み」</strong>です。人間のチームで、
+        リーダーが担当者に仕事を割り振り、成果を統合するのとよく似ています。
+      </p>
+
+      <h2>なぜ役割分担が必要か — 単一エージェントの限界</h2>
+      <p>
+        「1体の賢い AI にぜんぶ任せればいいのでは？」という疑問はもっともです。実際、
+        単純な作業なら単一エージェントで十分です。しかし仕事が大きく複雑になるほど、
+        1体に集約する方式には次のような限界が見えてきます。
+      </p>
+      <ul>
+        <li><strong>コンテキストの肥大</strong>：エージェントが一度に扱える文脈
+          （<strong>コンテキスト＝会話や資料の記憶枠</strong>）には上限があります。長い作業を続けると
+          情報が膨らみ、序盤の指示を取りこぼしたり、注意が散漫になって精度が落ちます。</li>
+        <li><strong>役割の混在</strong>：「作る」「点検する」「まとめる」を1体が兼ねると、
+          自分の成果を自分で甘く評価しがちです。人間でも、書いた本人より第三者のほうが
+          誤りに気づきやすいのと同じです。</li>
+        <li><strong>手順の見通しの悪さ</strong>：複数の工程が1つの長い思考に混ざると、
+          どこで間違えたのか、どこをやり直せばよいのかが追いにくくなります。</li>
+      </ul>
+
+      <h3>単一エージェント vs 複数エージェント</h3>
+      <p>
+        そこで、仕事を工程ごとに切り分け、それぞれ専門のエージェントに任せる方式が有効になります。
+        両者を対比すると違いがはっきりします。
+      </p>
+      <ul>
+        <li><strong>関心の分離</strong>：各エージェントは自分の役割だけに集中できるため、
+          プロンプト（指示）を専門特化でき、精度が上がりやすい。</li>
+        <li><strong>独立した検証</strong>：作る担当と点検する担当を分ければ、<strong>第三者の目</strong>で
+          品質を確認できる。誤りやすい思い込みを別のエージェントが拾える。</li>
+        <li><strong>見通しと再実行のしやすさ</strong>：工程が分かれていると、失敗した工程だけを
+          やり直せる。全体を最初からやり直す必要が減る。</li>
+        <li><strong>並列化</strong>：互いに依存しない工程は同時並行で進められ、時間を短縮できる。</li>
+      </ul>
+      <p>
+        ただし、複数エージェント化は<strong>万能薬ではありません</strong>。役割の受け渡しや
+        調整のぶんだけ、設計の手間・実行コスト・待ち時間は増えます（後述の「落とし穴」参照）。
+        <strong>単純な作業はあえて単一エージェントのまま</strong>にし、複雑さが分担の
+        オーバーヘッドを上回るときに初めて分割する——この見極めが実務では大切です。
+      </p>
+
+      <h2>代表的な構成パターン</h2>
+      <p>
+        エージェントの組み合わせ方には、いくつかの定番パターンがあります。まずは次の4つを
+        知っておけば十分です。実際のシステムはこれらを組み合わせて作られます。
+      </p>
+      <ul>
+        <li><strong>オーケストレーター／ワーカー型</strong>：指揮役（オーケストレーター）が
+          仕事を分解し、作業役（ワーカー）へ割り振って結果を統合する。
+          <strong>向き</strong>：全体の段取りを1か所で管理したいとき。もっとも基本的で応用が利く。</li>
+        <li><strong>シーケンシャル（パイプライン）型</strong>：処理を一直線につなぎ、前の出力を
+          次の入力にして順番に渡す。<strong>向き</strong>：工程の順序がはっきり決まっている作業
+          （例：下調べ→執筆→校正）。</li>
+        <li><strong>並列（ファンアウト／ファンイン）型</strong>：1つの仕事を複数に分けて同時に処理し
+          （ファンアウト）、結果を1つに集約する（ファンイン）。<strong>向き</strong>：独立した
+          調べ物を手分けするなど、待ち時間を減らしたいとき。</li>
+        <li><strong>レビュー／批評ループ型</strong>：生成役と評価役を分け、評価役が合格を出すまで
+          修正を往復させる。<strong>向き</strong>：品質が重要で、第三者チェックを効かせたいとき。</li>
+      </ul>
+      <p>
+        <strong>用語補足（ファンアウト／ファンイン）：</strong>「ファンアウト」は1つの入口から
+        複数の処理へ枝分かれさせること、「ファンイン」は複数の結果を1つの出口へ束ねることを指す
+        言い回しです。
+      </p>
+      <p>
+        次章で紹介するこのノートの制作フローは、<strong>「オーケストレーター／ワーカー型」を土台に、
+        要所で「レビュー／批評ループ型」を組み込んだ</strong>構成になっています。パターンは
+        排他的なものではなく、こうして重ねて使うのが実際的です。
+      </p>
+
+      <h2>実例：このノートはどう作られているか（5つの役割）</h2>
+      <p>
+        抽象的な話が続いたので、具体例を見てみましょう。この tech-memo の記事は、次の
+        <strong>5つの役割</strong>を持つエージェントの分業で作られています。これは特別な話ではなく、
+        オーケストレーター／ワーカー型とレビューループを組み合わせた、ごく標準的な構成の一例です。
+      </p>
+      <ul>
+        <li><strong>orchestrator（統括・司令塔）</strong>：利用者の窓口。要望を受け取り、
+          以下の各役割を適切な順で呼び出し、最終成果をまとめて返す指揮者。</li>
+        <li><strong>issue-manager（課題抽出）</strong>：要望を分析して「何を解決すべきか」を
+          課題として構造化する。曖昧な点は質問として洗い出す。</li>
+        <li><strong>planner（計画立案）</strong>：課題を実現するための手順・タスク分割・
+          担当割り当てを設計する。</li>
+        <li><strong>reviewer（レビュー）</strong>：計画や成果物を<strong>独立した視点</strong>で点検し、
+          合否と改善点を返す。品質の番人。</li>
+        <li><strong>reporter（報告）</strong>：作業全体の記録を取り、最終的な報告書に整える。</li>
+      </ul>
+      <p>
+        大まかな流れは「<strong>課題抽出 → 計画 → 計画のレビュー → 実行 → 成果物のレビュー → 報告</strong>」で、
+        レビューで問題が見つかれば前の工程に差し戻して直します（図1）。ポイントは、
+        <strong>作る役割と点検する役割が分かれている</strong>こと。だからこそ、自分では気づきにくい
+        抜けや誤りを別の視点で拾えます。
+      </p>
+      <p>
+        なお、この5つの役割分担は<strong>「この記事を作るときの進め方」</strong>を説明したもので、
+        リポジトリ上で誰でも動かせる形で公開しているのは、<code>/draft</code>（トピックから下書きを
+        起こして下書き PR を作る）と <code>/publish</code>（下書きを公開する）という2つの
+        <strong>スラッシュコマンド</strong>です。この記事自身も <code>/draft</code> の流れに沿って
+        用意されています。
+      </p>
+
+      <h2>コンテキストの引き継ぎ — オーケストレーションの肝</h2>
+      <p>
+        複数エージェントを連携させるうえで、<strong>いちばんの肝はコンテキスト（情報）の
+        引き継ぎ</strong>です。というのも、多くの構成でサブエージェントは<strong>毎回まっさらな状態で
+        起動する（コールドスタート）</strong>——つまり<strong>前の担当者との会話を見ていない</strong>
+        からです。人間のチームでも、口頭だけで伝えた内容は抜け落ちます。だからこそ、
+        受け渡しを<strong>形に残す</strong>工夫が要ります。
+      </p>
+      <p>
+        よく使われるのが、<strong>中間成果物をファイルに書き出して次の担当へ渡す</strong>方法です。
+        このノートの制作フローでも、各工程が次のようなファイルを残し、次のエージェントは
+        <strong>「このファイルを読んで作業して」</strong>と指示されて起動します。
+      </p>
+      <ul>
+        <li>要望の原文（orchestrator が保存）</li>
+        <li>抽出した課題リスト（issue-manager）</li>
+        <li>実行計画（planner）</li>
+        <li>レビュー結果（reviewer）</li>
+        <li>最終報告書（reporter）</li>
+      </ul>
+      <p>
+        さらに、課題・タスク・レビュー指摘にはそれぞれ <code>ISS-001</code>、<code>T-001</code>、
+        <code>REV-001</code> のような<strong>通し番号（ID）</strong>を振ります。こうしておくと、
+        「計画の T-003 は課題 ISS-005 に対応」「レビュー指摘 REV-002 を直した」のように、
+        <strong>工程をまたいで同じものを正確に指し示せる</strong>ようになります。会話が見えない
+        相手同士でも、ファイルと ID を共通の“地図”にすることで、認識のズレを防げるわけです。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 800 220" style="--diagram-min-width: 600px" role="img" aria-labelledby="orch-flow-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="orch-flow-title">エージェントオーケストレーションの標準ワークフロー：orchestrator が統括し、課題抽出・計画・計画レビュー・実行・成果物レビュー・報告を順に呼び出す。計画レビューが不合格なら計画へ、成果物レビューが不合格なら実行へ差し戻す2つの循環を含む。</title>
+          <defs>
+            <marker id="orch-flow-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- 統括役 -->
+          <rect class="node node--accent" x="260" y="14" width="280" height="44" rx="8"/>
+          <text class="label" x="400" y="41" text-anchor="middle">orchestrator（統括・司令塔）</text>
+          <path class="arrow" d="M400 58 L400 96" marker-end="url(#orch-flow-arrow)"/>
+          <text class="label label--muted" x="412" y="84" text-anchor="start">各役割を順に呼び出す</text>
+
+          <!-- パイプライン（6工程） -->
+          <rect class="node" x="26"  y="100" width="112" height="54" rx="8"/>
+          <rect class="node" x="153" y="100" width="112" height="54" rx="8"/>
+          <rect class="node" x="280" y="100" width="112" height="54" rx="8"/>
+          <rect class="node" x="407" y="100" width="112" height="54" rx="8"/>
+          <rect class="node" x="534" y="100" width="112" height="54" rx="8"/>
+          <rect class="node" x="661" y="100" width="112" height="54" rx="8"/>
+
+          <text class="label" x="82"  y="131" text-anchor="middle">課題抽出</text>
+          <text class="label" x="209" y="131" text-anchor="middle">計画</text>
+          <text class="label" x="336" y="123" text-anchor="middle">レビュー</text>
+          <text class="label label--muted" x="336" y="141" text-anchor="middle">（計画）</text>
+          <text class="label" x="463" y="131" text-anchor="middle">実行</text>
+          <text class="label" x="590" y="123" text-anchor="middle">レビュー</text>
+          <text class="label label--muted" x="590" y="141" text-anchor="middle">（成果物）</text>
+          <text class="label" x="717" y="131" text-anchor="middle">報告</text>
+
+          <path class="arrow" d="M138 127 L153 127" marker-end="url(#orch-flow-arrow)"/>
+          <path class="arrow" d="M265 127 L280 127" marker-end="url(#orch-flow-arrow)"/>
+          <path class="arrow" d="M392 127 L407 127" marker-end="url(#orch-flow-arrow)"/>
+          <path class="arrow" d="M519 127 L534 127" marker-end="url(#orch-flow-arrow)"/>
+          <path class="arrow" d="M646 127 L661 127" marker-end="url(#orch-flow-arrow)"/>
+
+          <!-- 差し戻しループ（2系統） -->
+          <path class="arrow" d="M336 154 L336 185 L209 185 L209 154" marker-end="url(#orch-flow-arrow)"/>
+          <text class="label label--muted" x="272" y="202" text-anchor="middle">計画へ差し戻し</text>
+          <path class="arrow" d="M590 154 L590 185 L463 185 L463 154" marker-end="url(#orch-flow-arrow)"/>
+          <text class="label label--muted" x="526" y="202" text-anchor="middle">実行へ差し戻し</text>
+        </svg>
+        <figcaption>図1: 標準ワークフロー。orchestrator が各役割を順に呼び出す。レビューは計画時と成果物完成時の2か所で行い、不合格ならそれぞれ直前の工程（計画／実行）へ差し戻して循環させる。</figcaption>
+      </figure>
+
+      <h2>注意点・落とし穴</h2>
+      <p>
+        複数エージェント化には見返りがある一方、固有の落とし穴もあります。代表的なものを
+        「症状 → 対策」の形で挙げます。
+      </p>
+      <ul>
+        <li><strong>指示の取りこぼし（症状）</strong>：コールドスタートのため、前提や決定事項が
+          次の担当に伝わらず、ちぐはぐな成果になる。<strong>対策</strong>：中間成果物を
+          ファイルに残し、呼び出し時のプロンプトにも要点を再掲する（二重で渡す）。</li>
+        <li><strong>コスト・待ち時間の増加（症状）</strong>：エージェントを呼ぶたびに LLM の
+          利用料と処理時間がかかり、工程が増えるほど積み上がる。<strong>対策</strong>：分割は
+          必要な範囲にとどめ、独立した工程は並列化して待ち時間を圧縮する。</li>
+        <li><strong>差し戻しの無限ループ（症状）</strong>：レビューと修正を延々と往復し、
+          いつまでも終わらない。<strong>対策</strong>：往復回数の上限を決め、超えたら人間に
+          判断を仰ぐ、または現状で打ち切るルールを設ける。</li>
+        <li><strong>役割の分割しすぎ（症状）</strong>：細かく割りすぎて受け渡しばかりが増え、
+          かえって非効率になる。<strong>対策</strong>：1エージェント＝1つの明確な責務を目安にし、
+          過剰な細分化を避ける。</li>
+        <li><strong>そもそも過剰設計（症状）</strong>：単純な作業に多段構成を持ち込み、
+          手間だけが増える。<strong>対策</strong>：まず単一エージェントで試し、
+          <strong>実際に困ってから</strong>分担を導入する。</li>
+      </ul>
+
+      <h2>小さく始めるには</h2>
+      <p>
+        エージェントオーケストレーションは、最初から5役割をそろえる必要はありません。むしろ
+        <strong>いちばん効果の出やすいところから、少しずつ</strong>導入するのが現実的です。
+      </p>
+      <ul>
+        <li>まずは<strong>「実行役」と「レビュー役」の2つ</strong>から始める。作ったものを
+          別のエージェントに点検させるだけで、品質の底上げを体感できる。</li>
+        <li>次に、繰り返す前処理（要望の整理や課題の洗い出し）を<strong>専門役へ切り出す</strong>。</li>
+        <li>独立して進められる調べ物が出てきたら、<strong>並列化</strong>で待ち時間を縮める。</li>
+        <li>工程が増えてきたら、全体を束ねる<strong>オーケストレーター（指揮役）</strong>を立て、
+          受け渡しをファイル＋ID で明確にする。</li>
+      </ul>
+      <p>
+        呼び出しのイメージは、おおむね次のような擬似コードで捉えられます（具体的な書き方は
+        利用するフレームワークの公式ドキュメントに従ってください。下記はあくまでイメージです）。
+      </p>
+      <pre><code># 擬似コード（イメージ）：作って→点検して→直す、の最小オーケストレーション
+draft  = writer_agent("記事を書いて", context_file="request.md")
+review = reviewer_agent("この下書きを点検して", context_file=draft)
+
+while review.rejected and attempts &lt; MAX_ATTEMPTS:   # 無限ループを防ぐ上限
+    draft  = writer_agent("指摘を直して", context_file=review)
+    review = reviewer_agent("再点検して", context_file=draft)
+
+publish(draft)   # レビューを通過したら次の工程へ</code></pre>
+
+      <h2>まとめ</h2>
+      <p>
+        エージェントオーケストレーションとは、<strong>専門の異なる複数のエージェントを指揮役が
+        まとめ、1つのタスクを完遂させる仕組み</strong>です。単一エージェントの限界
+        （コンテキスト肥大・役割混在・見通しの悪さ）を、<strong>関心の分離・独立した検証・
+        再実行のしやすさ・並列化</strong>で補うのが狙いでした。オーケストレーター／ワーカー型を
+        土台に、レビュー／批評ループなどを組み合わせて設計します。連携の肝は
+        <strong>コールドスタートを前提に、中間成果物のファイルと ID でコンテキストを確実に
+        引き継ぐこと</strong>。一方でコスト増や無限ループ、過剰設計といった落とし穴もあるため、
+        <strong>まず単一で試し、困ってから小さく分担を足していく</strong>のが賢明です。
+        この記事自身がその分業で作られていることが、いちばん身近な実例です。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://www.anthropic.com/engineering/building-effective-agents">Anthropic: Building effective agents（効果的なエージェント設計とワークフロー／オーケストレーター・ワーカー等のパターン解説）</a></li>
+        <li><a href="https://www.anthropic.com/engineering/multi-agent-research-system">Anthropic: How we built our multi-agent research system（マルチエージェント構成の実例）</a></li>
+        <li><a href="https://docs.claude.com/en/docs/claude-code/sub-agents">Claude Code: Subagents（サブエージェントの公式ドキュメント）</a></li>
+        <li><a href="https://langchain-ai.github.io/langgraph/">LangGraph（エージェントのワークフローをグラフで組むフレームワーク公式サイト）</a></li>
+        <li><a href="https://microsoft.github.io/autogen/">Microsoft AutoGen（マルチエージェント構築フレームワーク公式サイト）</a></li>
+        <li><a href="https://docs.crewai.com/">CrewAI（役割ベースのマルチエージェント・フレームワーク公式ドキュメント）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,10 +1,15 @@
 ---
-description: トピックから技術ノートの下書きを作成し、PRまで用意する
+description: トピックから技術ノートの下書きを作成し、レビュー用の Draft PR を用意する
 argument-hint: <トピック（書いてほしい題材）>
 ---
 
-トピック「$ARGUMENTS」について、技術ノートの**下書き**を作成し、PR を出すところまで行う。
+トピック「$ARGUMENTS」について、技術ノートの**下書き**を作成し、**Draft PR** を出すところまで行う。
 これは下書きフェーズなので、トップページ（index.html）にはリンクしない＝まだ公開しない。
+
+この PR は公開まで**同じ1本**を使い回す:
+下書きレビュー（Draft PR のまま）→ `/publish <slug>` で公開コミットを同じブランチに追加
+→ PR を Ready for review に切り替え → マージ＝公開、という流れになる。
+**この段階では PR をマージしない**（レビュー・修正はこの PR 上で行う）。
 
 ## 手順
 
@@ -14,7 +19,8 @@ argument-hint: <トピック（書いてほしい題材）>
 
 2. **ブランチを作成**
    - `git checkout main && git pull origin main`
-   - `git checkout -b claude/draft-<slug>`
+   - `git checkout -b claude/note-<slug>`
+   - このブランチが公開まで使う唯一のブランチになる。
 
 3. **下書きを執筆**
    - `notes/template/index.html` を元に `notes/_drafts/<slug>.html` を作成する。
@@ -40,18 +46,22 @@ argument-hint: <トピック（書いてほしい題材）>
 4. **表示を検証**
    - Chromium（Playwright）で `notes/_drafts/<slug>.html` をレンダリングし、CSS 適用・カテゴリバッジ・図・リンク・コードブロック表示に崩れが無いか確認する。
 
-5. **push して PR を作成**
-   - `git add` → コミット → `git push -u origin claude/draft-<slug>`（失敗時は指数バックオフで最大4回）。
-   - GitHub MCP で base `main` の PR を作成する。
+5. **push して Draft PR を作成**
+   - `git add` → コミット → `git push -u origin claude/note-<slug>`（失敗時は指数バックオフで最大4回）。
+   - GitHub MCP で base `main` の PR を **`draft: true`** で作成する。
    - PR 本文には次を明記:
      - これは**下書き**であり index.html には未リンク＝未公開であること。
+     - **この PR はマージせず**、内容をレビューして修正依頼はレビューコメントかセッションで指示すること。
+     - レビューが済んだら `/publish <slug>` を実行すると、この PR に公開コミット
+       （公開位置への移動＋トップページへのカード追加）が追加され、Ready for review に切り替わること。
+     - その後のマージ＝公開であること。
      - 設定したカテゴリ（`article:category`）。
      - `PUBLISHING_CHECKLIST.md` の「内容」項目のチェック状況。
-     - 公開する際は `/publish <slug>` を使うこと。
 
 6. **CI を確認**
    - `guardrails` チェック（gitleaks + lychee）の結果を確認し、ユーザーに報告する。
 
 ## 補足
 - 下書き（`notes/_drafts/<slug>.html`）・公開ノート（`notes/<日付-slug>/index.html`）はいずれも2階層下なので、CSS パスは `../../` のままで移動時も変わらない。
-- `notes/_drafts/` は `_` 始まりのため、main にマージされても GitHub Pages（Jekyll）では配信されない＝マージしても未公開のまま安全。
+- `notes/_drafts/` は `_` 始まりのため、仮にこの段階でマージされても GitHub Pages（Jekyll）では配信されない＝誤マージしても未公開のまま安全。
+- レビュー指摘への修正は同じブランチ `claude/note-<slug>` にコミットして push する（PR は自動で更新される）。
