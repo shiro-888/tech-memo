@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MLOps 入門 — 機械学習を「作って終わり」にしない考え方と主要ツール — tech-memo</title>
+  <meta name="description" content="機械学習システムを継続的に運用する MLOps の考え方と主要ツールを、DevOps との違いやデータドリフトなどの周辺知識を補足しながら、データサイエンティスト以外のエンジニアにも分かるよう整理した技術ノート。">
+  <meta name="article:category" content="ai">
+  <meta name="article:summary" content="MLOps を、通常のソフトウェア開発との違い（コード＋データ＋モデル）から、ML ライフサイクル・自動化・監視・主要ツールまで、データサイエンティスト以外のエンジニアにも分かるよう周辺知識つきで解説。">
+  <meta name="article:tags" content="MLOps,機械学習,DevOps,モデル運用,データドリフト">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>MLOps 入門 — 機械学習を「作って終わり」にしない考え方と主要ツール</h1>
+      <p class="note-meta">
+        <span class="badge badge--ai">AI</span>
+        <time datetime="2026-07-02">2026-07-02</time>
+      </p>
+
+      <p>
+        機械学習（ML）のモデルは、精度の良いものを一度作れば終わり——ではありません。
+        むしろ<strong>本番で動かし始めてからが本番</strong>で、データは日々変化し、
+        モデルの精度は静かに劣化していきます。こうした「機械学習システムを
+        継続的に、安定して運用し続けるための仕組みづくり」が
+        <strong>MLOps（エムエルオプス、Machine Learning + Operations）</strong>です。
+      </p>
+      <p>
+        このノートは、データサイエンティスト以外のエンジニア——Web
+        アプリやバックエンド、インフラを主戦場にしている方——が
+        MLOps の全体像をつかめることを目標にしています。専門用語は
+        そのつど周辺知識として補足するので、機械学習の詳細を知らなくても
+        読み進められるはずです。
+      </p>
+
+      <h2>なぜ MLOps が必要なのか — 普通のソフトウェアとの違い</h2>
+      <p>
+        まず押さえたいのは、機械学習システムが<strong>普通のソフトウェア開発とは
+        管理すべき対象が増える</strong>という点です。通常の開発で追いかけるのは
+        基本的に<strong>コード</strong>ですが、機械学習では次の3つが密接に
+        絡み合って挙動を決めます。
+      </p>
+      <ul>
+        <li><strong>コード</strong>：前処理や学習の手続きなど。従来どおり Git で管理できる。</li>
+        <li><strong>データ</strong>：学習に使ったデータそのもの。これが変われば、
+          同じコードでも<strong>でき上がるモデルが変わる</strong>。</li>
+        <li><strong>モデル</strong>：学習の結果として得られる成果物（重みファイル等）。
+          コードとデータの組み合わせから生まれる。</li>
+      </ul>
+      <p>
+        <strong>用語補足：</strong>ここで言う「モデル」とは、データから学習した
+        パターンを詰め込んだファイルのようなものです。入力（例：画像や数値）を
+        与えると出力（例：分類ラベルや予測値）を返す関数だと捉えると分かりやすい
+        でしょう。学習でモデルを作ることを<strong>トレーニング（学習）</strong>、
+        できたモデルに実データを入れて答えを出すことを<strong>推論
+        （インファレンス）</strong>と呼びます。
+      </p>
+      <p>
+        この「コード＋データ＋モデル」の三つ巴が MLOps を難しくしています。
+        たとえば「先月と同じ結果を再現したい」と思っても、当時のデータと
+        コードとモデルが揃って記録されていなければ再現できません。
+        <strong>再現性（同じ手順で同じ結果を得られること）</strong>の担保だけでも、
+        従来のソフトウェアより一段ハードルが上がるわけです。
+      </p>
+
+      <h2>MLOps は DevOps の機械学習版</h2>
+      <p>
+        MLOps の発想の土台は、Web 系のエンジニアにはおなじみの
+        <strong>DevOps</strong>です。DevOps が「開発（Dev）と運用（Ops）を
+        つなぎ、テスト・ビルド・デプロイを自動化して、安全に速く届け続ける」
+        文化・仕組みであるのに対し、MLOps はそこに<strong>データとモデルの
+        管理</strong>を足したものだと考えると腹落ちします。
+      </p>
+      <p>
+        DevOps でおなじみの用語は、MLOps でもほぼそのまま通用します。
+      </p>
+      <ul>
+        <li><strong>CI（継続的インテグレーション）</strong>：コードの変更を
+          自動でテスト・検証する。ML ではデータ検証やモデルの評価も加わる。</li>
+        <li><strong>CD（継続的デリバリー／デプロイ）</strong>：検証を通ったものを
+          自動で本番へ届ける。ML では「モデルのデプロイ」も対象になる。</li>
+        <li><strong>CT（継続的トレーニング）</strong>：MLOps 特有の概念。
+          新しいデータでモデルを<strong>定期的に再学習</strong>し、鮮度を保つ。</li>
+      </ul>
+      <p>
+        つまり MLOps は、まったく新しい世界というより
+        <strong>「DevOps の考え方を、変化するデータとモデルにも広げたもの」</strong>。
+        すでに CI/CD に馴染みがあるなら、その延長線上で理解できます。
+      </p>
+
+      <h2>ML ライフサイクルの全体像</h2>
+      <p>
+        MLOps が扱う一連の流れ（ライフサイクル）は、大きく次のように回ります。
+        ポイントは、これが一方通行ではなく<strong>ぐるりと循環するループ</strong>
+        だということです。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 760 210" style="--diagram-min-width: 560px" role="img" aria-labelledby="mlops-cycle-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="mlops-cycle-title">機械学習のライフサイクル：データ準備・実験学習・評価・デプロイ・監視運用が循環し、監視結果が再学習へフィードバックされる流れ</title>
+          <defs>
+            <marker id="mlops-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <rect class="node"           x="20"  y="40" width="120" height="54" rx="8"/>
+          <rect class="node"           x="168" y="40" width="120" height="54" rx="8"/>
+          <rect class="node"           x="316" y="40" width="120" height="54" rx="8"/>
+          <rect class="node"           x="464" y="40" width="120" height="54" rx="8"/>
+          <rect class="node node--accent" x="612" y="40" width="120" height="54" rx="8"/>
+          <text class="label" x="80"  y="72" text-anchor="middle">データ準備</text>
+          <text class="label" x="228" y="72" text-anchor="middle">実験・学習</text>
+          <text class="label" x="376" y="72" text-anchor="middle">評価</text>
+          <text class="label" x="524" y="72" text-anchor="middle">デプロイ</text>
+          <text class="label" x="672" y="72" text-anchor="middle">監視・運用</text>
+          <path class="arrow" d="M140 67 L168 67" marker-end="url(#mlops-arrow)"/>
+          <path class="arrow" d="M288 67 L316 67" marker-end="url(#mlops-arrow)"/>
+          <path class="arrow" d="M436 67 L464 67" marker-end="url(#mlops-arrow)"/>
+          <path class="arrow" d="M584 67 L612 67" marker-end="url(#mlops-arrow)"/>
+          <path class="arrow" d="M672 94 L672 160 L228 160 L228 94" marker-end="url(#mlops-arrow)"/>
+          <text class="label label--muted" x="450" y="182" text-anchor="middle">監視結果を次の学習へフィードバック（再学習）</text>
+        </svg>
+        <figcaption>図1: 機械学習のライフサイクル。作って終わりではなく、監視結果を再学習に戻して回し続ける。</figcaption>
+      </figure>
+
+      <ol>
+        <li><strong>データ準備</strong>：学習に使うデータを集め、掃除し（欠損や
+          異常値の処理）、モデルが扱いやすい形に整える。</li>
+        <li><strong>実験・学習</strong>：どのアルゴリズムや設定が良いか試行錯誤
+          （実験）しながら、モデルを学習させる。</li>
+        <li><strong>評価</strong>：できたモデルの性能を、学習に使っていない
+          データで測る。基準を満たさなければ前段へ戻る。</li>
+        <li><strong>デプロイ</strong>：合格したモデルを本番環境へ載せ、
+          API などから使えるようにする。</li>
+        <li><strong>監視・運用</strong>：本番でのふるまいと精度を見張り、
+          劣化の兆候をとらえる。異常があれば再学習の合図になる。</li>
+      </ol>
+      <p>
+        <strong>用語補足（特徴量）：</strong>データ準備の中でよく出てくるのが
+        <strong>特徴量（features）</strong>という言葉です。これは「モデルへの
+        入力として使う、意味のある数値・項目」のこと。たとえば中古車の価格を
+        当てるなら、走行距離・年式・排気量などが特徴量にあたります。
+        良い特徴量を作る工程は精度を大きく左右するため、MLOps でも
+        重視されます（後述の Feature Store はこのための仕組みです）。
+      </p>
+
+      <h2>MLOps を支える4つの考え方</h2>
+      <p>
+        ツールの名前を覚える前に、通底する原則を押さえておくと迷いません。
+        どのツールも、突き詰めれば次のどれかを実現するための道具です。
+      </p>
+
+      <h3>1. すべてをバージョン管理する</h3>
+      <p>
+        コードだけでなく<strong>データとモデルにもバージョンを付ける</strong>のが
+        MLOps の基本です。「このモデルは、どのコードで、どのデータから作られたか」
+        を後から正確にたどれる状態にしておくことで、再現性と説明責任
+        （なぜこの予測をしたのかを追える）を確保します。</p>
+
+      <h3>2. パイプラインを自動化する</h3>
+      <p>
+        データ準備から学習・評価・デプロイまでの一連の手順を、手作業の
+        ノートブック実行ではなく<strong>再実行可能なパイプライン</strong>として
+        組んでおきます。<strong>用語補足（パイプライン）：</strong>複数の処理を
+        順番につないだ「処理の流れ」のこと。同じ入力からいつでも同じ手順を
+        再現でき、一部だけ差し替えるのも容易になります。</p>
+
+      <h3>3. 継続的に監視する</h3>
+      <p>
+        本番のモデルは放っておくと精度が落ちます。その主犯が
+        <strong>データドリフト</strong>です。<strong>用語補足：</strong>
+        データドリフトとは、本番で入ってくるデータの傾向が、学習時のデータから
+        <strong>時間とともにズレていく</strong>現象を指します。たとえば
+        ユーザー層や季節、流行が変われば入力の分布も変わり、昔のデータで
+        学んだモデルは的外れになっていきます。だからこそ、精度や入力データの
+        変化を継続的に監視することが欠かせません。</p>
+
+      <h3>4. 再学習でモデルを更新し続ける</h3>
+      <p>
+        監視でドリフトや精度低下を検知したら、<strong>新しいデータで再学習</strong>
+        してモデルを差し替えます。これを安全に、できれば自動で回せる状態にするのが
+        MLOps のゴールの一つ。図1のループが回り続けるイメージです。</p>
+
+      <h2>主要ツールをカテゴリ別に整理する</h2>
+      <p>
+        MLOps ツールは数が多く、全体像がつかみにくいのが難点です。
+        ここでは「ライフサイクルのどこを助けるか」で分類して、代表的な
+        オープンソース／サービスを挙げます。<strong>まずは各カテゴリに1つずつ
+        名前を知っておく</strong>くらいで十分です。
+      </p>
+
+      <h3>実験管理（Experiment Tracking）</h3>
+      <p>
+        試行錯誤した設定と結果（精度など）を記録・比較する道具です。
+        「どの条件が一番良かったか」を後から見返せます。
+      </p>
+      <ul>
+        <li><strong>MLflow</strong>：実験記録からモデル管理までを幅広くカバーする
+          オープンソースの定番。</li>
+        <li><strong>Weights &amp; Biases（W&amp;B）</strong>：実験の記録・可視化に
+          強い SaaS。ダッシュボードが使いやすい。</li>
+      </ul>
+
+      <h3>ワークフロー／パイプライン</h3>
+      <p>
+        前処理・学習・評価といった処理を、順序立てて自動実行するための
+        オーケストレーション（実行の指揮）ツールです。
+      </p>
+      <ul>
+        <li><strong>Apache Airflow</strong>：処理の依存関係を DAG（一方向の
+          流れ図）で定義するワークフロー基盤。ML 以外のデータ処理でも広く使われる。</li>
+        <li><strong>Kubeflow</strong>：Kubernetes 上で ML パイプラインを回すことに
+          特化したツール群。</li>
+      </ul>
+      <p>
+        <strong>用語補足（Kubernetes）：</strong>コンテナ（アプリを動作環境ごと
+        パッケージ化したもの）を、多数のサーバーにまたがって自動で配置・
+        スケールさせる基盤です。インフラ系エンジニアにはおなじみですね。
+      </p>
+
+      <h3>データ・特徴量の管理</h3>
+      <ul>
+        <li><strong>DVC（Data Version Control）</strong>：Git と併用して
+          <strong>大きなデータやモデルにバージョンを付ける</strong>ツール。
+          Git 本体は巨大ファイルが苦手なので、その穴を埋める。</li>
+        <li><strong>Feast</strong>：<strong>Feature Store（特徴量ストア）</strong>の
+          代表格。作った特徴量を一元管理し、学習時と推論時で<strong>同じ計算</strong>を
+          使えるようにして、両者のズレ（学習・推論スキュー）を防ぐ。</li>
+      </ul>
+
+      <h3>モデルのデプロイ／サービング</h3>
+      <p>
+        学習済みモデルを、API などから呼び出せる形で本番に載せる
+        （<strong>サービング</strong>する）ためのツールです。
+      </p>
+      <ul>
+        <li><strong>BentoML</strong>：モデルを API サーバーやコンテナとして
+          手早くパッケージ化・配信できるオープンソース。</li>
+      </ul>
+
+      <h3>モニタリング</h3>
+      <ul>
+        <li><strong>Evidently</strong>：データドリフトやモデル品質の変化を
+          検知・可視化するオープンソース。「精度が落ちていないか」を見張る役。</li>
+      </ul>
+      <p>
+        なお、サーバー稼働やレイテンシといった<strong>システム面</strong>の
+        監視は、ML 専用ツールではなく <strong>Prometheus + Grafana</strong> など
+        既存の運用ツールがそのまま使えます。MLOps では
+        「モデルの精度・入力データの監視（ML 固有）」と「システムの監視
+        （従来どおり）」の<strong>両輪</strong>で見る、と覚えておくとよいでしょう。
+      </p>
+
+      <h3>統合プラットフォーム（クラウド）</h3>
+      <p>
+        個別ツールを組み合わせる代わりに、上記をまとめて提供する
+        マネージドサービスもあります。<strong>Amazon SageMaker</strong>、
+        <strong>Google Vertex AI</strong>、<strong>Azure Machine Learning</strong>
+        などが代表例です。自前で組む手間は減る一方、そのクラウドに寄せることに
+        なるため、規模や運用体制と相談して選びます。
+      </p>
+
+      <h2>小さく始めるには</h2>
+      <p>
+        MLOps は「最初から全部そろえる」ものではありません。むしろ
+        <strong>痛みを感じたところから一つずつ</strong>導入するのが現実的です。
+        非データサイエンティストのエンジニアがまず着手しやすいのは、次のような
+        自分の得意分野に近いところです。
+      </p>
+      <ul>
+        <li>まず<strong>実験管理（MLflow など）</strong>を入れ、
+          「どのモデルがどう作られたか」を記録する。</li>
+        <li>次に<strong>データ／モデルのバージョン管理（DVC など）</strong>で
+          再現性を確保する。</li>
+        <li>手作業の学習を<strong>パイプライン化</strong>し、ボタン一つで
+          回せるようにする。</li>
+        <li>本番に<strong>監視（Evidently ＋既存の Prometheus/Grafana）</strong>を
+          足し、劣化に気づける状態にする。</li>
+      </ul>
+      <p>
+        概念としては、学習済みモデルをサービングする流れはおおむね次のように
+        イメージできます（具体的な書き方は採用するツールの公式ドキュメントに
+        従ってください。下記は擬似コードです）。
+      </p>
+      <pre><code># 擬似コード（イメージ）：学習済みモデルを API として提供する
+model = load_model("model:latest")     # バージョン管理されたモデルを取得
+prediction = model.predict(request)    # 受け取った入力で推論
+log_metrics(request, prediction)       # 監視のため入力と結果を記録</code></pre>
+
+      <h2>まとめ</h2>
+      <p>
+        MLOps とは、<strong>DevOps の考え方をデータとモデルにも広げ、
+        機械学習システムを継続的に運用し続けるための仕組み</strong>です。
+        鍵になるのは、コード＋データ＋モデルの<strong>バージョン管理</strong>、
+        手順の<strong>パイプライン化・自動化</strong>、データドリフトを見張る
+        <strong>継続的な監視</strong>、そして<strong>再学習</strong>で鮮度を保つこと。
+        図1のループを安全に回し続けることがゴールです。
+      </p>
+      <p>
+        ツールは数多くありますが、「ライフサイクルのどこを助けるか」で
+        整理すれば怖くありません。実験管理・パイプライン・データ管理・
+        サービング・監視の各カテゴリで1つずつ名前を知り、
+        <strong>自分の困りごとに近いところから小さく</strong>始めていきましょう。
+        機械学習の専門家でなくても、CI/CD やインフラの知見はそのまま
+        MLOps で活きます。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://ml-ops.org/">ml-ops.org（MLOps の原則・全体像の解説）</a></li>
+        <li><a href="https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning">Google Cloud: MLOps（CI/CD と自動化パイプライン）</a></li>
+        <li><a href="https://mlflow.org/">MLflow（実験管理・モデル管理の公式サイト）</a></li>
+        <li><a href="https://dvc.org/">DVC（データ・モデルのバージョン管理）</a></li>
+        <li><a href="https://airflow.apache.org/">Apache Airflow（ワークフローオーケストレーション）</a></li>
+        <li><a href="https://www.kubeflow.org/">Kubeflow（Kubernetes 上の ML パイプライン）</a></li>
+        <li><a href="https://feast.dev/">Feast（特徴量ストア）</a></li>
+        <li><a href="https://www.evidentlyai.com/">Evidently（データドリフト・モデル監視）</a></li>
+        <li><a href="https://www.bentoml.com/">BentoML（モデルのサービング）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
