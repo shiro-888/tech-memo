@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloudflare「Monetization Gateway」徹底解説 — Webページ・APIを"アクセス課金"できる基盤と競合比較 — tech-memo</title>
+  <meta name="description" content="CloudflareのアクセスごとにWebページ・APIを課金できる「Monetization Gateway」の仕組み（x402プロトコル）と、AWS・Akamai/TollBit・Stripe等との競合比較を整理する技術ノート。">
+  <meta name="article:category" content="infra">
+  <meta name="article:summary" content="Cloudflareのアクセス課金基盤「Monetization Gateway」の仕組み（x402プロトコル）と、AWS・Akamai/TollBit・RSL・Stripe等の類似サービスとの違いを整理した比較ノート。">
+  <meta name="article:tags" content="Cloudflare,x402,決済,AIエージェント,Webモネタイズ">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+
+  <style>
+    .compare-table-wrap {
+      overflow-x: auto;
+      margin: 1.5rem 0;
+    }
+    .compare-table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 920px;
+      table-layout: fixed;
+      font-size: 0.92rem;
+    }
+    .compare-table th,
+    .compare-table td {
+      border: 1px solid var(--color-border);
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+      overflow-wrap: break-word;
+    }
+    .compare-table th {
+      background: var(--color-bg-soft);
+      font-weight: 600;
+    }
+    .compare-table th:nth-child(1) { width: 16%; }
+    .compare-table th:nth-child(2) { width: 12%; }
+    .compare-table th:nth-child(3) { width: 16%; }
+    .compare-table th:nth-child(4) { width: 16%; }
+    .compare-table th:nth-child(5) { width: 40%; }
+    .compare-table td:first-child,
+    .compare-table th:first-child {
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>Cloudflare「Monetization Gateway」徹底解説 — Webページ・APIを"アクセス課金"できる基盤と競合比較</h1>
+      <p class="note-meta">
+        <span class="badge badge--infra">インフラ</span>
+        <time datetime="2026-07-07">2026-07-07</time>
+      </p>
+
+      <p>
+        2026年7月1日、Cloudflare は<strong>「Monetization Gateway（マネタイゼーション・ゲートウェイ）」</strong>
+        を発表しました。Cloudflare の保護下にある Web ページ・API・データセット・MCP ツールなど、
+        あらゆるリソースに対して<strong>アクセス1回ごとの課金</strong>を設定できる仕組みで、
+        「AIエージェント時代の収益化基盤」と位置づけられています。
+      </p>
+      <p>
+        このノートは、<strong>クローラー課金やステーブルコイン決済に馴染みがないエンジニア</strong>を
+        対象に、Monetization Gateway が何を解決しようとしているのか、どういう技術で動いているのかを
+        整理したうえで、AWS・Akamai・TollBit・Stripe など<strong>類似・競合するサービスとの違い</strong>
+        を比較します。
+      </p>
+
+      <h2>なぜ今「アクセス課金」が必要になったのか</h2>
+      <p>
+        背景にあるのは、<strong>AI クローラー・AI エージェントがコンテンツを大量に取得する一方で、
+        従来の検索クローラーのような見返り（サイトへの送客・広告収益）がほとんど発生しない</strong>
+        という問題です。
+      </p>
+      <ul>
+        <li><strong>検索クローラー</strong>：ページを索引化し、検索結果経由でサイトへの
+          アクセス（トラフィック）を送り返す。結果的にページビューや広告収益につながる。</li>
+        <li><strong>AI クローラー／エージェント</strong>：ページを取得して要約・回答生成に使うが、
+          元サイトへの送客はほとんど発生しない。サイト側は配信コスト（帯域・サーバー負荷）だけを
+          負担し、収益化の機会を失う。</li>
+      </ul>
+      <p>
+        この非対称を是正するため、Cloudflare は2025年7月に<strong>Pay Per Crawl</strong>
+        （クローラーごとの課金）を先行して提供しており、Monetization Gateway はその対象範囲を
+        「クロールされるページ」から「<strong>Cloudflare 配下のあらゆるリソース</strong>」へ
+        広げたものと位置づけられます。
+      </p>
+
+      <h2>用語補足</h2>
+      <ul>
+        <li><strong>HTTP 402（Payment Required）</strong>：HTTP/1.0 の仕様（1991年）で
+          予約されたまま、長年どのサービスも実装してこなかったステータスコード。「支払いが
+          必要」を意味する。</li>
+        <li><strong>x402</strong>：Coinbase が開発し、2026年4月に Linux Foundation へ寄贈された
+          オープンプロトコル。この HTTP 402 を実際に機能させ、<strong>HTTP 上でステーブルコイン
+          （米ドル連動の暗号資産、例: USDC）による即時少額決済</strong>を行えるようにする。</li>
+        <li><strong>Facilitator（決済仲介者）</strong>：x402 のリクエストを検証し、ブロックチェーン上での
+          決済（オンチェーン決済）を実行するサービス。Coinbase 自身がホストする Facilitator の他、
+          各社が独自に用意することもできる。決済は<strong>ピアツーピア</strong>（買い手のウォレットから
+          売り手のウォレットへ直接）で完了し、Cloudflare 自身が資金を預かるわけではない。</li>
+        <li><strong>MCP（Model Context Protocol）</strong>：AI エージェントが外部ツール・データソースを
+          呼び出すための標準プロトコル。Monetization Gateway では「MCP ツールの呼び出し」自体も
+          課金対象にできる。</li>
+        <li><strong>AI エージェント</strong>：人間の指示を受けて、Web 検索やツール実行など
+          複数の手順を自律的に選んで実行する AI。本ノートの文脈では「支払いをともなって
+          Web リソースへアクセスする主体」を指す。</li>
+      </ul>
+
+      <h2>Monetization Gateway の仕組み</h2>
+      <p>
+        Monetization Gateway は、料金ポリシーとアクセス制御を一元管理する
+        <strong>コントロールプレーン</strong>を提供しつつ、実際の支払い検証・強制は
+        Cloudflare の<strong>世界330都市以上に及ぶエッジネットワーク</strong>上で行います。
+        これにより、決済のやり取り（x402 のハンドシェイク）が買い手の近くで完結し、
+        <strong>オリジンサーバーに負荷が届く前</strong>にブロックできます。
+      </p>
+      <p>
+        典型的なやり取りの流れは次の通りです（図1）。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 860 280" style="--diagram-min-width: 600px" role="img" aria-labelledby="x402-flow-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="x402-flow-title">x402によるMonetization Gatewayの決済フロー：クライアント(AIエージェント)がCloudflareエッジへ未払いでGETすると402 Payment Requiredが返り、署名済み支払い付きで再送する。エッジはFacilitatorへ検証・決済を依頼し、決済完了後にオリジンへフェッチしてコンテンツを取得、クライアントへ200 OKで返す。</title>
+          <defs>
+            <marker id="x402-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- ノード -->
+          <rect class="node" x="20" y="90" width="140" height="60" rx="8"/>
+          <text class="label" x="90" y="115" text-anchor="middle">クライアント</text>
+          <text class="label label--muted" x="90" y="133" text-anchor="middle">(AIエージェント)</text>
+
+          <rect class="node node--accent" x="280" y="90" width="240" height="60" rx="8"/>
+          <text class="label" x="400" y="115" text-anchor="middle">Cloudflare Edge</text>
+          <text class="label label--muted" x="400" y="133" text-anchor="middle">Monetization Gateway</text>
+
+          <rect class="node" x="690" y="90" width="150" height="60" rx="8"/>
+          <text class="label" x="765" y="115" text-anchor="middle">オリジン</text>
+          <text class="label label--muted" x="765" y="133" text-anchor="middle">Web/API/MCP</text>
+
+          <rect class="node" x="330" y="210" width="200" height="50" rx="8"/>
+          <text class="label" x="430" y="240" text-anchor="middle">Facilitator（x402）</text>
+
+          <!-- ①往路 -->
+          <path class="arrow" d="M160 108 L280 108" marker-end="url(#x402-arrow)"/>
+          <text class="label label--muted" x="220" y="98" text-anchor="middle">①GET（未払い）</text>
+
+          <!-- ②402→再送 のループ -->
+          <path class="arrow" d="M300 150 L300 178 L150 178 L150 150" marker-end="url(#x402-arrow)"/>
+          <text class="label label--muted" x="225" y="196" text-anchor="middle">②402 Payment Required → 署名付き支払いで再送</text>
+
+          <!-- ③④ Facilitatorとのやり取り -->
+          <path class="arrow" d="M380 150 L380 210" marker-end="url(#x402-arrow)"/>
+          <text class="label label--muted" x="345" y="182" text-anchor="end">③検証・決済依頼</text>
+          <path class="arrow" d="M470 210 L470 150" marker-end="url(#x402-arrow)"/>
+          <text class="label label--muted" x="490" y="182" text-anchor="start">④決済完了</text>
+
+          <!-- ⑤⑥ オリジンとのやり取り -->
+          <path class="arrow" d="M520 108 L690 108" marker-end="url(#x402-arrow)"/>
+          <text class="label label--muted" x="605" y="98" text-anchor="middle">⑤フェッチ</text>
+          <path class="arrow" d="M690 132 L520 132" marker-end="url(#x402-arrow)"/>
+          <text class="label label--muted" x="605" y="150" text-anchor="middle">⑥コンテンツ</text>
+        </svg>
+        <figcaption>
+          図1: x402 によるアクセス課金の流れ。②〜④で支払いが確定した後にのみ、
+          エッジは⑤⑥でオリジンからコンテンツを取得し、クライアントへ 200 OK として返す
+          （最終応答の矢印は簡略化のため省略）。
+        </figcaption>
+      </figure>
+
+      <p>
+        ポイントは、<strong>支払いの検証・強制がすべてエッジ（Cloudflare 側）で完結し、
+        オリジンサーバーは支払い済みのリクエストしか受け取らない</strong>ことです。
+        また決済はステーブルコインでの<strong>ピアツーピア送金</strong>であり、Cloudflare が
+        いったん資金をプールするわけではありません。
+      </p>
+
+      <h2>何に・どう課金できるか</h2>
+      <p>
+        Monetization Gateway が対象にするリソースと、代表的な設定例は次の通りです。
+      </p>
+      <ul>
+        <li><strong>Web ページ・記事</strong>：ページ単位でのアクセス課金（Pay Per Crawl の延長）。</li>
+        <li><strong>API</strong>：HTTP メソッド単位での課金。例えば
+          <code>/api/premium/*</code> への <code>GET</code>/<code>POST</code> 1回ごとに
+          一定額を課金する。</li>
+        <li><strong>可変課金</strong>：処理負荷に応じて金額を変える。例えば画像生成 API では、
+          使用した計算量に応じて上限額までの範囲で課金する。</li>
+        <li><strong>データセット・MCP ツール呼び出し</strong>：AI エージェントが呼び出す
+          ツールやデータ取得そのものを課金対象にできる。</li>
+        <li><strong>未認証アクセスのみ課金</strong>：契約者・認証済みボットは無料で通し、
+          未認証のアクセスにだけ課金する、といった条件分岐も可能。</li>
+      </ul>
+
+      <h2>競合・類似サービスとの比較</h2>
+      <p>
+        「AI エージェントに Web リソースの利用料を払わせる」という課題には、
+        Cloudflare 以外にも複数のプレイヤーが取り組んでいます。層（レイヤー）や
+        アプローチが異なるため、単純な優劣ではなく<strong>役割の違い</strong>として
+        整理すると理解しやすくなります。
+      </p>
+
+      <div class="compare-table-wrap">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>サービス</th>
+              <th>レイヤー</th>
+              <th>決済方式</th>
+              <th>対象</th>
+              <th>特徴</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Cloudflare<br>Monetization Gateway</td>
+              <td>CDN/エッジ</td>
+              <td>x402 + ステーブルコイン（P2P）</td>
+              <td>Webページ・API・データセット・MCPツール</td>
+              <td>対象範囲が最も広い。ポリシー管理は単一のコントロールプレーンに集約</td>
+            </tr>
+            <tr>
+              <td>Cloudflare<br>Pay Per Crawl</td>
+              <td>CDN/エッジ</td>
+              <td>Cloudflareアカウント経由の課金</td>
+              <td>Webページ（クロール単位）</td>
+              <td>Monetization Gatewayの前身。対象がページ単位に限られる</td>
+            </tr>
+            <tr>
+              <td>AWS WAF<br>AI traffic monetization</td>
+              <td>WAF</td>
+              <td>x402（同一プロトコル）</td>
+              <td>Webコンテンツ・API</td>
+              <td>2026年6月提供開始。Web Bot Authでボットを識別し身元別に価格差を設定可能</td>
+            </tr>
+            <tr>
+              <td>Akamai + TollBit + Skyfire</td>
+              <td>CDN/ボット管理 + 提携先</td>
+              <td>KYAPay（トークン）等、提携先依存</td>
+              <td>Webコンテンツ</td>
+              <td>Akamaiのボット検知にTollBitの契約単価・Skyfireのエージェント身元確認を組み合わせる提携モデル</td>
+            </tr>
+            <tr>
+              <td>TollBit（単体）</td>
+              <td>ライセンス基盤（SaaS）</td>
+              <td>ページ/クエリ単価の契約課金</td>
+              <td>Webコンテンツ</td>
+              <td>1対1のライセンス契約を大量に管理するプラットフォーム。CDN非依存でAPI連携</td>
+            </tr>
+            <tr>
+              <td>RSL（Really Simple Licensing）</td>
+              <td>宣言的な標準規格</td>
+              <td>規格自体は決済手段を持たない</td>
+              <td>Webコンテンツ全般</td>
+              <td>robots.txtを拡張し、利用条件・単価等を機械可読に宣言する標準。決済の実行は他基盤に委ねる</td>
+            </tr>
+            <tr>
+              <td>Stripe<br>Agentic Commerce Protocol</td>
+              <td>決済API/チェックアウト</td>
+              <td>従来決済手段（カード等）+ Shared Payment Token</td>
+              <td>ECでの商品購入</td>
+              <td>「コンテンツへのアクセス課金」ではなく「AIエージェント経由の商品購入・決済」が対象。問題領域が異なる</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        いくつか補足します。
+      </p>
+      <ul>
+        <li><strong>AWS との関係</strong>：AWS WAF の AI traffic monetization は、Cloudflare と
+          <strong>同じ x402 プロトコル</strong>を採用しています。x402 自体は2026年4月に
+          Linux Foundation へ寄贈されたオープン標準で、Cloudflare・AWS・Stripe・Google・
+          Microsoft・Visa などが支持を表明しています。つまり<strong>プロトコルは共通化されつつ、
+          「どのレイヤー（CDN か WAF か）でどう使いやすく実装するか」で各社が競っている</strong>
+          状況です。</li>
+        <li><strong>Akamai 陣営との違い</strong>：Akamai は自社で決済網を持たず、TollBit（契約・単価管理）
+          や Skyfire（エージェントの身元確認＋トークン決済）との<strong>提携</strong>で機能を
+          組み立てています。Cloudflare・AWS が単一ベンダー内で完結させているのに対し、
+          Akamai 陣営は<strong>専業サービスの組み合わせ</strong>である点が異なります。</li>
+        <li><strong>RSL は競合ではなく補完関係</strong>：RSL はあくまで
+          「どんな条件でコンテンツを使ってよいか」を robots.txt 的に宣言する<strong>規格</strong>
+          であり、実際の課金・強制を行う仕組みは持ちません。Monetization Gateway のような
+          エッジ側の強制力と組み合わせて使う、補完的な位置づけです。</li>
+        <li><strong>Google はどちらかというと「規格の支持者」側</strong>：Google 自身は
+          Cloudflare や AWS のような課金ゲートウェイ製品を持たず、x402 の支持企業として
+          名を連ねる立場です。英国 CMA（競争市場庁）の規制圧力もあり、Google が
+          「オプトアウト機能に課金する」動きは見せていません。</li>
+        <li><strong>Stripe ACP は別問題</strong>：Stripe の Agentic Commerce Protocol は
+          「AI エージェントが人間に代わって EC サイトで買い物をする」ためのプロトコルで、
+          Monetization Gateway が扱う「コンテンツ・API へのアクセス課金」とは<strong>対象と
+          課題が異なります</strong>。どちらも「AI エージェント時代の決済」という文脈では
+          語られますが、混同しないよう注意してください。</li>
+      </ul>
+
+      <h2>導入時に気をつけたいポイント</h2>
+      <ul>
+        <li><strong>提供状況（症状）</strong>：Monetization Gateway は発表時点でウェイトリスト
+          登録制であり、まだ一般提供（GA）ではありません。<strong>対策</strong>：本番導入の
+          計画を立てる際は、提供時期・料金体系の正式発表を待つ。</li>
+        <li><strong>関連ポリシーとの相互作用（症状）</strong>：Cloudflare は2026年9月15日から、
+          広告を掲載するページで検索・エージェント利用・学習用途が混在する
+          「mixed-use クローラー」をデフォルトでブロックする方針も打ち出しています。
+          課金設定とクローラー分類ポリシーが絡み合うため、<strong>意図せず正規のクローラーまで
+          止めてしまう</strong>リスクがあります。<strong>対策</strong>：クローラー種別ごとの
+          挙動を事前にテストモードで確認する。</li>
+        <li><strong>ベンダーロックイン（症状）</strong>：課金の強制ロジックがすべて
+          Cloudflare のエッジ上にあるため、CDN を移行する際は課金設定も含めて
+          作り直しが必要になる。<strong>対策</strong>：契約条件やコンテンツ単価などの
+          ビジネスロジックは、可能な範囲でベンダー中立な形（RSL 等）でも記録しておく。</li>
+        <li><strong>小規模事業者のウォレット運用負荷（症状）</strong>：ステーブルコインでの
+          受け取りには、ウォレット管理・税務処理など従来の広告収益にはなかった運用が
+          発生する。<strong>対策</strong>：導入前に決済フローの実運用（入金確認・会計処理）を
+          小規模に試してから本格展開する。</li>
+      </ul>
+
+      <h2>まとめ</h2>
+      <p>
+        Cloudflare の Monetization Gateway は、<strong>Pay Per Crawl で培ったページ単位の
+        クローラー課金を、API・データセット・MCP ツールまで拡張し、x402 というオープンな
+        HTTP 決済プロトコルの上に構築し直したもの</strong>です。支払いの検証・強制を
+        エッジ側で完結させることで、オリジンサーバーを保護しながら「AI エージェントに
+        コンテンツやツールの利用料を払わせる」仕組みを提供します。
+      </p>
+      <p>
+        競合を整理すると、<strong>AWS WAF は同じ x402 プロトコルを使う直接競合</strong>、
+        <strong>Akamai 陣営（TollBit/Skyfire）は専業サービスの組み合わせによる代替アプローチ</strong>、
+        <strong>RSL は決済を伴わない補完的な宣言規格</strong>、<strong>Stripe の ACP は
+        そもそも問題領域が異なる（エージェント経由の商品購入）</strong>、という位置づけです。
+        x402 自体がオープン標準として複数ベンダーに支持され始めていることから、
+        今後は「プロトコルの共通化」と「実装レイヤーでの差別化」が進んでいくと見られます。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://blog.cloudflare.com/monetization-gateway/">Cloudflare Blog: Announcing the Monetization Gateway（公式発表）</a></li>
+        <li><a href="https://blog.cloudflare.com/introducing-pay-per-crawl/">Cloudflare Blog: Introducing pay per crawl（前身機能の発表）</a></li>
+        <li><a href="https://developers.cloudflare.com/ai-crawl-control/features/pay-per-crawl/what-is-pay-per-crawl/">Cloudflare Docs: What is Pay Per Crawl?</a></li>
+        <li><a href="https://docs.cdp.coinbase.com/x402/welcome">Coinbase Developer Platform: x402 Overview（x402プロトコルの技術ドキュメント）</a></li>
+        <li><a href="https://aws.amazon.com/blogs/aws/aws-waf-adds-ai-traffic-monetization-capability-to-help-content-owners-charge-ai-bots-for-content-access/">AWS Blog: AWS WAF adds AI traffic monetization capability（競合サービスの発表）</a></li>
+        <li><a href="https://tollbit.com/">TollBit（AIクローラー向けライセンス基盤）</a></li>
+        <li><a href="https://rslstandard.org/">RSL: Really Simple Licensing（宣言的コンテンツライセンス標準）</a></li>
+        <li><a href="https://stripe.com/blog/agentic-commerce-suite">Stripe Blog: Introducing the Agentic Commerce Suite</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
