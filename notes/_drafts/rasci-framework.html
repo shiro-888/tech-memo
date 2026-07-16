@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>内製開発を検討するときの RASCI フレームワーク — 「誰が何に責任を持つか」を1枚の表で決める — tech-memo</title>
+  <meta name="description" content="外注から内製開発へ舵を切るとき、あいまいになりがちな役割と責任を明確にする「RASCI（RACI＋Support）」フレームワークを、各役割の意味・マトリクスの作り方・内製検討での使いどころ・落とし穴まで、プロジェクト管理が初めての方にも分かるよう周辺知識つきで解説する技術ノート。">
+  <meta name="article:category" content="design">
+  <meta name="article:summary" content="内製開発を検討するときに役割と責任のあいまいさを解きほぐす「RASCI（RACI＋Support）」を、5つの役割の意味・マトリクスの作り方・内製での使いどころ・落とし穴まで、プロジェクト管理が初めての人にも分かるよう平易に整理。">
+  <meta name="article:tags" content="RASCI,RACI,責任分担,内製開発,プロジェクト管理,役割定義">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+
+  <!-- この記事専用の軽量スタイル（RASCIマトリクス表）。テーマ変数に追従させ外部依存を持たない。 -->
+  <style>
+    .rasci-table-wrap { overflow-x: auto; margin: 1.5rem 0; }
+    .rasci-table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 520px;
+      font-size: 0.9rem;
+    }
+    .rasci-table th,
+    .rasci-table td {
+      border: 1px solid var(--color-border);
+      padding: 0.5rem 0.65rem;
+      text-align: center;
+    }
+    .rasci-table thead th {
+      background: var(--color-bg-soft);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .rasci-table tbody th {
+      background: var(--color-bg-soft);
+      text-align: left;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .rasci-table td {
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    /* 役割コードの色分け（カテゴリ変数を流用してテーマ追従） */
+    .rc { display: inline-block; min-width: 1.4em; }
+    .rc--r { color: var(--cat-web); }      /* Responsible */
+    .rc--a { color: var(--cat-security); } /* Accountable */
+    .rc--s { color: var(--cat-infra); }    /* Support */
+    .rc--c { color: var(--cat-design); }   /* Consulted */
+    .rc--i { color: var(--color-muted); }  /* Informed */
+    .rasci-legend {
+      list-style: none;
+      padding: 0;
+      margin: 0.75rem 0 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 1rem;
+      font-size: 0.85rem;
+      color: var(--color-muted);
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>内製開発を検討するときの RASCI フレームワーク — 「誰が何に責任を持つか」を1枚の表で決める</h1>
+      <p class="note-meta">
+        <span class="badge badge--design">設計</span>
+        <time datetime="2026-07-16">2026-07-16</time>
+      </p>
+
+      <p>
+        システム開発を外部のベンダーに任せる<strong>外注（アウトソーシング）</strong>から、
+        自社の人員で作る<strong>内製（インソーシング）</strong>へ切り替える——。近年よく検討される
+        この選択には、技術面だけでなく<strong>「誰が何に責任を持つのか」を組織として決め直す</strong>
+        という、見落とされがちな宿題がついてきます。外注では契約書とベンダーが引き受けてくれていた
+        判断や責任が、内製にした途端に<strong>自分たちの側へ移ってくる</strong>からです。
+      </p>
+      <p>
+        この「役割と責任のあいまいさ」を、たった1枚の表で解きほぐす道具が
+        <strong>RASCI（ラスキ）フレームワーク</strong>です。このノートは、
+        <strong>プロジェクト管理の手法にはあまり触れてこなかったエンジニア</strong>を対象に、
+        RASCI とは何か、どう表を作るのか、そして<strong>内製開発を検討・推進する場面でどう効くのか</strong>を、
+        用語をそのつど補足しながら解説します。読み終える頃には、自分のチームの一場面を
+        RASCI の表に落とし込めるようになることを目標にします。
+      </p>
+
+      <h2>RASCI とは — RACI に「S（支援）」を足したもの</h2>
+      <p>
+        RASCI は、あるタスクや成果物について<strong>関係者それぞれがどんな責任を負うか</strong>を、
+        役割の頭文字で書き分けるための枠組みです。もとになっているのは、より広く使われている
+        <strong>RACI（レイシー）</strong>という4役割のモデルで、そこに <strong>S（Support＝支援）</strong>
+        を加えたものが RASCI です。5つの役割は次の意味を持ちます。
+      </p>
+      <ul>
+        <li><strong>R — Responsible（実行責任者）</strong>：実際に手を動かして作業を進める人。
+          1つのタスクに複数いてもかまいません。「作る人」です。</li>
+        <li><strong>A — Accountable（説明責任者）</strong>：その成果の<strong>最終的な責任を負い、
+          可否を判断・承認する</strong>ただ1人。R に作業を任せ、完了を見届けます。
+          <strong>用語補足：</strong>Responsible が「手を動かす責任」なのに対し、Accountable は
+          「うまくいったか／いかなかったかを引き受ける責任」です。日本語ではどちらも「責任」なので
+          混同しがちですが、英語では別の言葉で、役割もはっきり異なります。</li>
+        <li><strong>S — Support（支援者）</strong>：R が作業を完遂できるよう、
+          <strong>リソース・専門知識・人手を提供して手伝う</strong>人。C（相談先）が「意見を言う」
+          立場なのに対し、S は<strong>実作業に手を貸す</strong>点が違います。RACI にはこの役割がなく、
+          RASCI で明示的に足された部分です。</li>
+        <li><strong>C — Consulted（相談先）</strong>：作業や意思決定の<strong>前に</strong>意見を求める相手。
+          双方向のやり取り（相談）が発生します。</li>
+        <li><strong>I — Informed（報告先）</strong>：物事が<strong>決まった後・進んだ後</strong>に
+          結果を知らされる相手。基本は一方向の共有で、相談はしません。</li>
+      </ul>
+      <p>
+        図1は、この5つの役割の関係を1つのタスクを中心に整理したものです。A が全体の責任を持ちながら
+        R に作業を委ね、R を S が手伝い、C には事前に相談し、I には結果を伝える——という向きを表しています。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 720 300" style="--diagram-min-width: 520px" role="img" aria-labelledby="rasci-roles-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="rasci-roles-title">RASCI の5役割の関係図。中央のタスクに対し、Accountable（説明責任者）が上から責任を持ちつつ Responsible（実行責任者）へ作業を委任し、Support（支援者）が Responsible を手伝い、Consulted（相談先）へは事前に相談、Informed（報告先）へは結果を報告する。</title>
+          <defs>
+            <marker id="rasci-roles-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- 中央：タスク -->
+          <rect class="node node--accent" x="290" y="120" width="140" height="60" rx="8"/>
+          <text class="label" x="360" y="147" text-anchor="middle">対象タスク</text>
+          <text class="label label--muted" x="360" y="166" text-anchor="middle">（成果物）</text>
+
+          <!-- A：上 -->
+          <rect class="node" x="290" y="20" width="140" height="54" rx="8"/>
+          <text class="label" x="360" y="43" text-anchor="middle">A 説明責任者</text>
+          <text class="label label--muted" x="360" y="61" text-anchor="middle">最終責任・承認（1名）</text>
+          <path class="arrow" d="M360 74 L360 118" marker-end="url(#rasci-roles-arrow)"/>
+          <text class="label label--muted" x="372" y="100" text-anchor="start">委任</text>
+
+          <!-- R：左 -->
+          <rect class="node" x="40" y="123" width="150" height="54" rx="8"/>
+          <text class="label" x="115" y="146" text-anchor="middle">R 実行責任者</text>
+          <text class="label label--muted" x="115" y="164" text-anchor="middle">手を動かす</text>
+          <path class="arrow" d="M190 150 L288 150" marker-end="url(#rasci-roles-arrow)"/>
+
+          <!-- S：左下（R を支援） -->
+          <rect class="node" x="40" y="223" width="150" height="54" rx="8"/>
+          <text class="label" x="115" y="246" text-anchor="middle">S 支援者</text>
+          <text class="label label--muted" x="115" y="264" text-anchor="middle">人手・知識を提供</text>
+          <path class="arrow" d="M115 223 L115 179" marker-end="url(#rasci-roles-arrow)"/>
+          <text class="label label--muted" x="127" y="205" text-anchor="start">手伝う</text>
+
+          <!-- C：右上 -->
+          <rect class="node" x="530" y="123" width="150" height="54" rx="8"/>
+          <text class="label" x="605" y="146" text-anchor="middle">C 相談先</text>
+          <text class="label label--muted" x="605" y="164" text-anchor="middle">事前に意見を求める</text>
+          <path class="arrow" d="M432 143 L528 143" marker-end="url(#rasci-roles-arrow)"/>
+          <path class="arrow" d="M528 158 L432 158" marker-end="url(#rasci-roles-arrow)"/>
+
+          <!-- I：右下 -->
+          <rect class="node" x="530" y="223" width="150" height="54" rx="8"/>
+          <text class="label" x="605" y="246" text-anchor="middle">I 報告先</text>
+          <text class="label label--muted" x="605" y="264" text-anchor="middle">結果を知らせる</text>
+          <path class="arrow" d="M420 178 L560 221" marker-end="url(#rasci-roles-arrow)"/>
+          <text class="label label--muted" x="470" y="210" text-anchor="middle">報告</text>
+        </svg>
+        <figcaption>図1: RASCI の5役割の関係。A が最終責任を持って R に委任し、S が R を支援。C とは事前に双方向で相談し、I には結果を一方向で報告する。</figcaption>
+      </figure>
+
+      <h2>マトリクス（RASCI 表）の作り方</h2>
+      <p>
+        RASCI は<strong>表（マトリクス）</strong>で表現します。作り方はシンプルで、次の手順です。
+      </p>
+      <ol>
+        <li><strong>縦軸にタスク・成果物を並べる</strong>：プロジェクトの主な作業や意思決定を1行ずつ書き出します
+          （例：「要件定義」「アーキテクチャ選定」「実装」「リリース判断」）。</li>
+        <li><strong>横軸に人・役職を並べる</strong>：関わる担当者や役割を1列ずつ置きます
+          （個人名でも「開発リード」「PdM」のような役職でも可）。</li>
+        <li><strong>交点に R / A / S / C / I を書き込む</strong>：各タスクについて、各人がどの責任を負うかを
+          1文字で埋めます。担当しないセルは空欄にします。</li>
+      </ol>
+      <p>
+        埋めるときに守るべき<strong>基本ルール</strong>があります。とくに最初の2つは重要です。
+      </p>
+      <ul>
+        <li><strong>各行の A（説明責任者）はちょうど1人</strong>：これは
+          <strong>「1人のボス」原則</strong>と呼ばれます。A が0人だと責任者不在で決めごとが宙に浮き、
+          2人以上だと責任のなすり合いが起きます。RASCI 表を作る最大の効用は、この
+          <strong>「各タスクの最終責任者を1人に確定させる」</strong>ことにあります。</li>
+        <li><strong>各行に R は最低1人</strong>：手を動かす人がいなければタスクは進みません。</li>
+        <li><strong>C と I は0人でも複数でもよい</strong>：相談先・報告先は必要に応じて置きます。</li>
+        <li><strong>1人が同じタスクで A 兼 R を持つのは可</strong>：小さなチームでは「自分で決めて自分で作る」
+          こともあります。ただし C や I まで一人で兼ねると、チェック機能が働かない点に注意します。</li>
+      </ul>
+
+      <h2>内製開発の一場面を RASCI で書いてみる</h2>
+      <p>
+        具体例として、<strong>「これまで外注していた社内向けツールを、内製に切り替えるか検討し、
+        実際に作る」</strong>という架空のプロジェクトを RASCI 表にしてみます（表1）。登場する役割は、
+        事業側の意思決定者（プロダクトオーナー）、開発をまとめる開発リード、実装するエンジニア、
+        品質を見る QA、そして情報システム部門とします。
+      </p>
+
+      <div class="rasci-table-wrap">
+        <table class="rasci-table">
+          <thead>
+            <tr>
+              <th scope="col">タスク／役割</th>
+              <th scope="col">プロダクト<br>オーナー</th>
+              <th scope="col">開発リード</th>
+              <th scope="col">エンジニア</th>
+              <th scope="col">QA</th>
+              <th scope="col">情報システム部</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">内製 / 外注の方針判断</th>
+              <td><span class="rc rc--a">A</span></td>
+              <td><span class="rc rc--c">C</span></td>
+              <td><span class="rc rc--i">I</span></td>
+              <td></td>
+              <td><span class="rc rc--c">C</span></td>
+            </tr>
+            <tr>
+              <th scope="row">要件定義</th>
+              <td><span class="rc rc--a">A</span></td>
+              <td><span class="rc rc--r">R</span></td>
+              <td><span class="rc rc--s">S</span></td>
+              <td><span class="rc rc--c">C</span></td>
+              <td><span class="rc rc--i">I</span></td>
+            </tr>
+            <tr>
+              <th scope="row">アーキテクチャ選定</th>
+              <td><span class="rc rc--i">I</span></td>
+              <td><span class="rc rc--a">A</span></td>
+              <td><span class="rc rc--r">R</span></td>
+              <td><span class="rc rc--c">C</span></td>
+              <td><span class="rc rc--c">C</span></td>
+            </tr>
+            <tr>
+              <th scope="row">実装</th>
+              <td></td>
+              <td><span class="rc rc--a">A</span></td>
+              <td><span class="rc rc--r">R</span></td>
+              <td><span class="rc rc--s">S</span></td>
+              <td></td>
+            </tr>
+            <tr>
+              <th scope="row">リリース判断</th>
+              <td><span class="rc rc--a">A</span></td>
+              <td><span class="rc rc--r">R</span></td>
+              <td><span class="rc rc--c">C</span></td>
+              <td><span class="rc rc--c">C</span></td>
+              <td><span class="rc rc--i">I</span></td>
+            </tr>
+            <tr>
+              <th scope="row">運用・保守の引き継ぎ</th>
+              <td><span class="rc rc--i">I</span></td>
+              <td><span class="rc rc--c">C</span></td>
+              <td><span class="rc rc--r">R</span></td>
+              <td><span class="rc rc--i">I</span></td>
+              <td><span class="rc rc--a">A</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <ul class="rasci-legend">
+          <li><span class="rc rc--r">R</span> 実行責任者</li>
+          <li><span class="rc rc--a">A</span> 説明責任者</li>
+          <li><span class="rc rc--s">S</span> 支援者</li>
+          <li><span class="rc rc--c">C</span> 相談先</li>
+          <li><span class="rc rc--i">I</span> 報告先</li>
+        </ul>
+      </div>
+      <p style="color: var(--color-muted); font-size: 0.85rem; text-align: center; margin-top: 0.5rem;">
+        表1: 内製化を検討・実行する架空プロジェクトの RASCI 表。各行の A はちょうど1つになっている。
+      </p>
+
+      <p>
+        この表を眺めると、言葉で議論していたときには見えなかったことが浮かび上がります。たとえば：
+      </p>
+      <ul>
+        <li><strong>「内製 / 外注の方針判断」の A はプロダクトオーナー</strong>——技術的な相談（C）は
+          開発リードや情シスに求めつつ、<strong>最終判断は事業側が1人で引き受ける</strong>と明確になります。
+          ここがあいまいだと「開発が勝手に内製と決めた」「事業が現場を無視した」という対立が起きがちです。</li>
+        <li><strong>「アーキテクチャ選定」の A は開発リード</strong>——技術判断は技術の責任者に委ねる、という
+          役割分担が表れています。プロダクトオーナーは I（結果を知る）にとどまります。</li>
+        <li><strong>「運用・保守の引き継ぎ」の A は情報システム部</strong>——作って終わりにせず、
+          <strong>内製後に誰が面倒を見るのか</strong>を先に決めておく。内製化でとくに抜けやすい論点です。</li>
+      </ul>
+
+      <h2>なぜ内製開発の検討で RASCI が効くのか</h2>
+      <p>
+        RASCI 自体はあらゆるプロジェクトで使える汎用ツールですが、<strong>内製開発の検討</strong>という
+        場面ではとりわけ相性がよい理由があります。
+      </p>
+      <ul>
+        <li><strong>外注時に「外」にあった責任が「内」に移る</strong>：外注では、品質・納期・保守の責任の
+          多くをベンダーが契約で引き受けていました。内製に切り替えると、その責任が自社の各所へ
+          再配分されます。<strong>誰がどれを引き取るのかを可視化</strong>しないと、責任の空白地帯が生まれます。
+          RASCI はまさにこの再配分を1枚で表せます。</li>
+        <li><strong>事業側と開発側の境界を引ける</strong>：内製では事業部門とエンジニアが密に協働するぶん、
+          「これは誰が決めるのか」が曖昧になりがちです。A を1人に定める RASCI は、
+          <strong>意思決定の境界線</strong>をはっきりさせます。</li>
+        <li><strong>「支援（S）」を明示できる</strong>：内製の立ち上げ期は、専任の担当者だけでは手が回らず、
+          他チームの一時的な支援に頼ることがよくあります。RACI では表しにくかった
+          <strong>「手伝う人」</strong>を、RASCI は S として書けます。誰に・どの程度の助力を
+          見込んでいるかを事前に共有でき、「頼んだつもり／聞いてない」の齟齬を減らせます。</li>
+        <li><strong>属人化のリスクが見える</strong>：表を作ると、特定の1人に R も A も C も集中している行が
+          目に見えます。これは内製でありがちな<strong>属人化</strong>の兆候で、早めに手を打つ材料になります。</li>
+      </ul>
+      <blockquote>
+        RASCI 表の価値は、埋めた結果そのものより、<strong>埋める過程で交わす「これは誰の責任？」
+        という会話</strong>にあります。表は合意を記録する器です。
+      </blockquote>
+
+      <h2>よくある落とし穴</h2>
+      <p>
+        便利な一方で、RASCI にも使い方を誤るとかえって混乱を招く落とし穴があります。
+        「症状 → 対策」で整理します。
+      </p>
+      <ul>
+        <li><strong>A が複数、または不在（症状）</strong>：最終責任者があいまいで、決めごとが進まない／
+          もめる。<strong>対策</strong>：各行の A はちょうど1人、を最優先ルールとして機械的に点検する。</li>
+        <li><strong>R と A の混同（症状）</strong>：「作る人」と「責任を負う人」を区別せず、
+          全員に R を振ってしまう。<strong>対策</strong>：「手を動かすのは誰（R）」「うまくいったかを
+          引き受けるのは誰（A）」を別々に問う。</li>
+        <li><strong>C（相談先）を置きすぎる（症状）</strong>：相談先が多すぎて、意見の集約に時間がかかり
+          意思決定が遅くなる。<strong>対策</strong>：C は「その意見がないと判断を誤る人」に絞る。
+          単に知らせたいだけなら I にする。</li>
+        <li><strong>作って終わりで更新しない（症状）</strong>：初期に作った表が実態と乖離し、形骸化する。
+          <strong>対策</strong>：フェーズの節目（検討 → 開発 → 運用）で見直す。役割は段階で変わる前提を持つ。</li>
+        <li><strong>表を作ること自体が目的化（症状）</strong>：精緻な表づくりに時間を使い、肝心の合意形成が
+          おろそかになる。<strong>対策</strong>：粒度は粗くてよい。主要タスク5〜10行から始め、
+          <strong>会話のきっかけ</strong>として使う。</li>
+      </ul>
+
+      <h2>小さく始めるには</h2>
+      <p>
+        最初から全タスクを網羅した完璧な表を目指す必要はありません。内製を検討し始めた段階なら、
+        次のように小さく始めるのが現実的です。
+      </p>
+      <ul>
+        <li>まず<strong>「内製 / 外注の方針判断」の1行だけ</strong>を書き、その A（最終責任者）を
+          チームで合意する。ここが決まらないと、その先の議論は空中戦になります。</li>
+        <li>内製に進めると決めたら、<strong>主要な5〜10タスク</strong>（要件定義・設計・実装・
+          リリース判断・運用引き継ぎなど）に広げる。</li>
+        <li>各行の A が1人になっているかだけ、<strong>まず最初に点検</strong>する。R・S・C・I の
+          精度はあとから上げれば十分です。</li>
+        <li>フェーズが変わったら表を見直す。とくに<strong>運用・保守の担い手</strong>は、
+          内製化で抜けやすいので早めに埋めておきます。</li>
+      </ul>
+
+      <h2>まとめ</h2>
+      <p>
+        RASCI は、<strong>RACI の4役割（R 実行責任者・A 説明責任者・C 相談先・I 報告先）に
+        S 支援者を加えた</strong>、責任分担を1枚の表で可視化するフレームワークです。最大のねらいは
+        <strong>各タスクの最終責任者（A）を1人に確定させること</strong>にあります。
+        外注から内製へ舵を切るときは、これまで社外にあった責任が社内へ再配分されるため、
+        <strong>誰がどの責任を引き取るのか</strong>があいまいになりがちです。RASCI 表を使えば、
+        方針判断・設計・実装・リリース・運用引き継ぎといった各場面の責任の所在を、
+        事業側と開発側をまたいで見える化できます。完璧な表より、<strong>「これは誰の責任？」を
+        問う会話</strong>そのものに価値がある——まずは方針判断の1行と、その A を1人に決めるところから
+        始めてみてください。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://ja.wikipedia.org/wiki/RACI%E5%9B%B3">RACI図 — Wikipedia（RACI の4役割・「1人のボス」原則・表の構造の解説）</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Responsibility_assignment_matrix">Responsibility assignment matrix — Wikipedia（RACI の派生形として RASCI／Support 役割を含む各バリエーションを整理）</a></li>
+        <li><a href="https://e-words.jp/w/RACI%E3%83%81%E3%83%A3%E3%83%BC%E3%83%88.html">RACIチャートとは — IT用語辞典 e-Words（用語の簡潔な定義）</a></li>
+        <li><a href="https://www.atlassian.com/ja/work-management/project-management/raci-chart">RACI チャート：その内容と使用方法 — Atlassian（作り方と実務での使い方のガイド）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
