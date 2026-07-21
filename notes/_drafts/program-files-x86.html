@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Program Files と Program Files (x86) はなぜ2つある？ — 32bit/64bit 共存の仕組み — tech-memo</title>
+  <meta name="description" content="64bit Windows に「C:\Program Files」と「C:\Program Files (x86)」が両方ある理由を、32bit/64bit アプリの共存・WOW64・System32 と SysWOW64 の名前の逆転・環境変数まで初心者向けに解説する。">
+  <meta name="article:category" content="tools">
+  <meta name="article:summary" content="64bit Windows に「C:\Program Files」と「C:\Program Files (x86)」が2つある理由を、32bit/64bit アプリの共存・WOW64・System32 と SysWOW64 の名前の逆転まで初心者向けに解説。">
+  <meta name="article:tags" content="Windows,64bit,WOW64,Program Files,System32">
+
+  <!-- CSSはルートから2階層下を参照。下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>Program Files と Program Files (x86) はなぜ2つある？ — 32bit/64bit 共存の仕組み</h1>
+      <p class="note-meta">
+        <span class="badge badge--tools">ツール</span>
+        <time datetime="2026-07-21">2026-07-21</time>
+      </p>
+
+      <p>
+        X（旧 Twitter）で、こんな趣旨の投稿を見かけました——「二〇代前半の若者は、
+        Windows を使っていても <code>C:\Program Files</code> と
+        <code>C:\Program Files (x86)</code> の<strong>両方が存在すること</strong>に
+        気づいていないのではないか」。言われてみれば、アプリはストアや
+        インストーラのボタン一発で入る時代です。エクスプローラで
+        <code>C:</code> ドライブの中身をわざわざ覗く機会は減りました。
+      </p>
+      <p>
+        では、なぜフォルダが2つあるのか。名前についている
+        <strong>「(x86)」とは何なのか</strong>。この記事では、その背景にある
+        <strong>32bit と 64bit の共存</strong>という Windows の設計事情を、
+        必要な周辺知識を補足しながら初心者向けに解きほぐします。
+      </p>
+
+      <h2>まず結論：2つは「32bit用」と「64bit用」の置き場</h2>
+      <p>
+        64bit 版の Windows には、アプリの標準的なインストール先が
+        <strong>2つ</strong>用意されています。役割はきれいに分かれています。
+      </p>
+      <ul>
+        <li><code>C:\Program Files</code> … <strong>64bit</strong> アプリ用</li>
+        <li><code>C:\Program Files (x86)</code> … <strong>32bit</strong> アプリ用</li>
+      </ul>
+      <p>
+        ちなみに <strong>32bit 版</strong>の Windows には
+        <code>C:\Program Files</code> しかありません。2つに分かれているのは
+        「64bit Windows の上で 32bit アプリも動かせる」ようにした結果です。
+        まずは、その前提となる「bit 数」と「x86」という言葉を整理します。
+      </p>
+
+      <h2>前提知識：32bit / 64bit と「x86」</h2>
+      <p>
+        ここでの <strong>bit 数</strong>は、大まかに言えば CPU が一度に扱える
+        データやメモリアドレスの幅のことです。32bit では扱えるメモリ空間が
+        約 4GB に制限されますが、64bit ではその制限が事実上なくなり、
+        大量のメモリを活かせます。いまのパソコンはほぼ 64bit です。
+      </p>
+      <p>
+        紛らわしいのが <strong>「x86」</strong>という呼び名です。これは
+        インテルの古い CPU 系列（8086、80386…と末尾が「86」で続いた）に
+        由来する呼称で、転じて<strong>32bit の命令セット</strong>を指す言葉として
+        定着しました。一方、64bit の方式は <strong>x64</strong>（x86-64 / AMD64）と
+        呼ばれます。つまり——
+      </p>
+      <ul>
+        <li><strong>x86</strong> = 32bit（古い方）</li>
+        <li><strong>x64</strong> = 64bit（新しい方）</li>
+      </ul>
+      <p>
+        だから <code>Program Files (x86)</code> は、名前がそのまま
+        「<strong>32bit（x86）アプリ用のフォルダ</strong>」を意味しているわけです。
+        <em>bit 数の少ない古い方にわざわざ「(x86)」という但し書きが付いている</em>、
+        と覚えると分かりやすいでしょう。
+      </p>
+
+      <h2>なぜ2つに分けるのか：同じアプリの「別バージョン」がぶつからないように</h2>
+      <p>
+        64bit Windows は、64bit アプリだけでなく、昔ながらの 32bit アプリも
+        動かせます。ここで問題になるのが、<strong>同じソフトの 32bit 版と
+        64bit 版が、同じ場所にインストールされると衝突する</strong>ことです。
+      </p>
+      <p>
+        たとえば同名のフォルダや設定ファイル、共有ライブラリ（後述の DLL）が
+        上書きし合うと、どちらのアプリも壊れかねません。そこで Windows は、
+        <strong>置き場そのものを最初から分けて</strong>おくことで、
+        32bit 版と 64bit 版が平和に共存できるようにしました。
+        インストーラは、そのアプリが 32bit か 64bit かに応じて、
+        自動的に正しい方のフォルダへファイルを置きます。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 600 220" style="--diagram-min-width: 440px" role="img" aria-labelledby="pf-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="pf-title">64bit Windows では、64bitアプリはProgram Filesへ、32bitアプリはProgram Files (x86)へと振り分けられる</title>
+          <defs>
+            <marker id="pf-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <text class="label label--muted" x="300" y="20" text-anchor="middle">64bit Windows</text>
+
+          <!-- 上段：64bit アプリ -->
+          <rect class="node" x="20" y="45" width="150" height="55" rx="10"/>
+          <text class="label" x="95" y="70" text-anchor="middle">64bit アプリ</text>
+          <text class="label label--muted" x="95" y="88" text-anchor="middle">（x64）</text>
+
+          <rect class="node node--accent" x="360" y="45" width="220" height="55" rx="10"/>
+          <text class="label" x="470" y="70" text-anchor="middle">C:\Program Files</text>
+          <text class="label label--muted" x="470" y="88" text-anchor="middle">64bit 用</text>
+
+          <path class="arrow" d="M170 72 L360 72" marker-end="url(#pf-arrow)"/>
+
+          <!-- 下段：32bit アプリ -->
+          <rect class="node" x="20" y="130" width="150" height="55" rx="10"/>
+          <text class="label" x="95" y="155" text-anchor="middle">32bit アプリ</text>
+          <text class="label label--muted" x="95" y="173" text-anchor="middle">（x86）</text>
+
+          <rect class="node" x="360" y="130" width="220" height="55" rx="10"/>
+          <text class="label" x="470" y="155" text-anchor="middle">C:\Program Files (x86)</text>
+          <text class="label label--muted" x="470" y="173" text-anchor="middle">32bit 用</text>
+
+          <path class="arrow" d="M170 157 L360 157" marker-end="url(#pf-arrow)"/>
+
+          <text class="label label--muted" x="265" y="118" text-anchor="middle">インストール先を自動で振り分け</text>
+        </svg>
+        <figcaption>図1: bit 数に応じてインストール先が分かれる。アクセント色が「素の」Program Files（64bit 用）。</figcaption>
+      </figure>
+
+      <h2>裏方の主役：WOW64</h2>
+      <p>
+        この「64bit Windows の上で 32bit アプリを動かす」仕掛けを担うのが
+        <strong>WOW64</strong>（<strong>W</strong>indows 32-bit
+        <strong>o</strong>n <strong>W</strong>indows <strong>64</strong>-bit）です。
+        名前のとおり「64bit Windows の上の 32bit 環境」という意味で、
+        OS に最初から組み込まれています（利用者が有効化する必要はありません）。
+      </p>
+      <p>
+        WOW64 の仕事は、32bit アプリを<strong>だまして</strong>、あたかも
+        32bit Windows の上で動いているかのように見せることです。そのために、
+        アプリからのファイルアクセスやレジストリ（後述）アクセスを
+        こっそり横取りして、32bit 用の場所へ<strong>付け替え（リダイレクト）</strong>ます。
+        アプリ側のコードを書き換えずに済むのが利点です。
+      </p>
+
+      <h2>もう一つの分裂：System32 と SysWOW64（名前が逆！）</h2>
+      <p>
+        Program Files と同じ「32/64 の分裂」は、Windows 本体の
+        システムフォルダにも起きています。ここには<strong>直感に反する
+        名前の付き方</strong>があり、多くの人がつまずくポイントです。
+      </p>
+      <p>
+        まず <strong>DLL</strong>（Dynamic Link Library）という言葉を押さえます。
+        DLL は、複数のアプリが共通で使う機能をまとめた部品ファイルのこと。
+        32bit アプリは 32bit の DLL、64bit アプリは 64bit の DLL を必要とし、
+        <strong>両者は互換性がありません</strong>。そこで DLL の置き場も
+        2つに分かれます。ところが、その名前が——
+      </p>
+      <ul>
+        <li><code>C:\Windows\System32</code> … 中身は <strong>64bit</strong> の DLL</li>
+        <li><code>C:\Windows\SysWOW64</code> … 中身は <strong>32bit</strong> の DLL</li>
+      </ul>
+      <p>
+        と、<strong>名前と中身が逆</strong>になっています。「32」と付く方が
+        64bit で、「64」と付く方が 32bit。理不尽に見えますが、これは
+        <strong>互換性を守った結果</strong>です。昔の 32bit アプリの多くは
+        DLL の置き場所として <code>System32</code> という名前を
+        <strong>ハードコード（プログラム中に直書き）</strong>していました。
+        64bit 移行のときに <code>System32</code> の名前を変えてしまうと、
+        それらのアプリが軒並み動かなくなります。そこで
+        <code>System32</code> という<strong>名前は据え置き</strong>にして中身だけ
+        64bit に入れ替え、32bit の DLL は新設の <code>SysWOW64</code>
+        （＝ WOW64 用）に移した——という経緯です。
+      </p>
+      <p>
+        では、System32 を直書きした古い 32bit アプリはどうなるのか。
+        ここで先ほどの WOW64 のリダイレクトが効きます。32bit アプリが
+        <code>System32</code> を開こうとすると、WOW64 が横取りして、
+        中身を<strong>こっそり <code>SysWOW64</code> にすり替える</strong>のです。
+        アプリは「System32 を開けた」と思っていますが、実際に触っているのは
+        32bit 用の SysWOW64 です。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 620 250" style="--diagram-min-width: 460px" role="img" aria-labelledby="redir-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="redir-title">64bitアプリはSystem32を直接開くが、32bitアプリのSystem32アクセスはWOW64がSysWOW64へ付け替える</title>
+          <defs>
+            <marker id="redir-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- 左：呼び出し側 -->
+          <rect class="node node--accent" x="20" y="30" width="150" height="55" rx="10"/>
+          <text class="label" x="95" y="55" text-anchor="middle">64bit アプリ</text>
+          <text class="label label--muted" x="95" y="73" text-anchor="middle">System32 を要求</text>
+
+          <rect class="node" x="20" y="165" width="150" height="55" rx="10"/>
+          <text class="label" x="95" y="190" text-anchor="middle">32bit アプリ</text>
+          <text class="label label--muted" x="95" y="208" text-anchor="middle">System32 を要求</text>
+
+          <!-- 中：WOW64 リダイレクタ -->
+          <rect class="node" x="250" y="165" width="120" height="55" rx="10"/>
+          <text class="label" x="310" y="190" text-anchor="middle">WOW64</text>
+          <text class="label label--muted" x="310" y="208" text-anchor="middle">付け替え</text>
+
+          <!-- 右：実体フォルダ -->
+          <rect class="node node--accent" x="440" y="30" width="160" height="55" rx="10"/>
+          <text class="label" x="520" y="55" text-anchor="middle">System32</text>
+          <text class="label label--muted" x="520" y="73" text-anchor="middle">中身=64bit DLL</text>
+
+          <rect class="node" x="440" y="165" width="160" height="55" rx="10"/>
+          <text class="label" x="520" y="190" text-anchor="middle">SysWOW64</text>
+          <text class="label label--muted" x="520" y="208" text-anchor="middle">中身=32bit DLL</text>
+
+          <!-- 矢印：64bitはそのまま -->
+          <path class="arrow" d="M170 57 L440 57" marker-end="url(#redir-arrow)"/>
+          <text class="label label--muted" x="300" y="47" text-anchor="middle">そのまま</text>
+
+          <!-- 矢印：32bit → WOW64 → SysWOW64 -->
+          <path class="arrow" d="M170 192 L250 192" marker-end="url(#redir-arrow)"/>
+          <path class="arrow" d="M370 192 L440 192" marker-end="url(#redir-arrow)"/>
+        </svg>
+        <figcaption>図2: 名前は同じ「System32」でも、32bit アプリの要求は WOW64 が SysWOW64 へ付け替える。</figcaption>
+      </figure>
+
+      <h2>環境変数にも「(x86)」版がある</h2>
+      <p>
+        フォルダのパスは、<strong>環境変数</strong>（OS が用意する変数）でも
+        参照できます。Program Files 周りには、次のような変数があります。
+        面白いのは、<strong>同じ変数でも、それを読むアプリが 32bit か 64bit かで
+        中身が変わる</strong>ことです（これも WOW64 の働きです）。
+      </p>
+      <pre><code># 64bit アプリから見た値
+%ProgramFiles%       -> C:\Program Files
+%ProgramFiles(x86)%  -> C:\Program Files (x86)
+%ProgramW6432%       -> C:\Program Files   （常に64bit側を指す）
+
+# 32bit アプリから見た値（WOW64 が付け替える）
+%ProgramFiles%       -> C:\Program Files (x86)   ← 32bit側にすり替わる
+%ProgramFiles(x86)%  -> C:\Program Files (x86)
+%ProgramW6432%       -> C:\Program Files   （こちらは常に64bit側）</code></pre>
+      <p>
+        つまり、32bit アプリにとっての <code>%ProgramFiles%</code> は
+        <code>Program Files (x86)</code> を指します。「素直に 64bit 側を
+        指したい」ときのために、<strong><code>%ProgramW6432%</code></strong>
+        （W6432 = Windows 64bit の意）という、常に 64bit 側を指す変数が
+        用意されているわけです。同じ発想で、レジストリ（Windows の設定を
+        木構造で保持するデータベース）でも、32bit アプリの設定は
+        <code>HKEY_LOCAL_MACHINE\Software\WOW6432Node</code> という専用の
+        枝へ自動的に振り分けられます。
+      </p>
+
+      <h2>実際に確かめてみる</h2>
+      <p>
+        自分の PC で確認するのも簡単です。エクスプローラのアドレス欄や
+        コマンドプロンプトで、次を見てみてください（64bit Windows のみ、
+        <code>(x86)</code> フォルダが存在します）。
+      </p>
+      <pre><code>rem コマンドプロンプトで環境変数を表示
+echo %ProgramFiles%
+echo %ProgramFiles(x86)%
+echo %ProgramW6432%
+
+rem 2つのフォルダを一覧
+dir "C:\Program Files"
+dir "C:\Program Files (x86)"</code></pre>
+      <p>
+        <code>Program Files (x86)</code> の中には、32bit のまま提供され続けている
+        アプリ（古めのユーティリティなど）が並んでいるはずです。逆に、近年の
+        主要アプリは 64bit 化が進み、素の <code>Program Files</code> 側に
+        入ることが増えました。
+      </p>
+
+      <h2>なぜ最近は気づきにくいのか</h2>
+      <p>
+        冒頭の X の投稿に戻ると、「若者が2つのフォルダに気づいていない」のには
+        いくつか背景があります。
+      </p>
+      <ul>
+        <li><strong>32bit アプリが減った</strong>：多くのソフトが 64bit のみの
+          提供になり、<code>(x86)</code> フォルダを開く機会が減った。</li>
+        <li><strong>インストール先を意識しなくなった</strong>：ストア経由や
+          ワンクリックのインストーラが主流で、パスを見ずに済む。</li>
+        <li><strong>そもそもフォルダを掘らない</strong>：検索やスタートメニューから
+          アプリを起動でき、<code>C:</code> ドライブを直接たどる必要がない。</li>
+      </ul>
+      <p>
+        つまりこの2フォルダは、<strong>32bit から 64bit への移行という、
+        20年ほど前に始まった大きな転換の「地層」</strong>のようなものです。
+        普段は意識しなくても、いざインストール先を選ぶときや、古い 32bit
+        アプリのトラブルを調べるときに、この知識が効いてきます。
+      </p>
+
+      <h2>まとめ</h2>
+      <ul>
+        <li><code>Program Files</code> は 64bit 用、<code>Program Files (x86)</code>
+          は 32bit 用。<strong>(x86) = 32bit</strong> の意。</li>
+        <li>2つに分けるのは、同じアプリの 32bit 版と 64bit 版を<strong>衝突させない</strong>ため。</li>
+        <li>橋渡し役は <strong>WOW64</strong>。32bit アプリのファイル/レジストリ
+          アクセスを 32bit 用の場所へ<strong>リダイレクト</strong>する。</li>
+        <li><code>System32</code>=64bit、<code>SysWOW64</code>=32bit と
+          <strong>名前と中身が逆</strong>なのは、互換性維持のため名前を据え置いた名残。</li>
+      </ul>
+      <p>
+        「なぜ2つあるのか」を一度知っておくと、Windows の内部が少しだけ
+        立体的に見えてきます。次に <code>C:</code> ドライブを覗いたとき、
+        この地層を思い出してみてください。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://learn.microsoft.com/en-us/windows/win32/winprog64/running-32-bit-applications">Running 32-bit Applications（WOW64 の概要 / Microsoft Learn）</a></li>
+        <li><a href="https://learn.microsoft.com/en-us/windows/win32/winprog64/wow64-implementation-details">WOW64 Implementation Details（環境変数の一覧を含む / Microsoft Learn）</a></li>
+        <li><a href="https://learn.microsoft.com/en-us/windows/win32/winprog64/file-system-redirector">File System Redirector（System32 → SysWOW64 の付け替え / Microsoft Learn）</a></li>
+        <li><a href="https://learn.microsoft.com/en-us/windows/win32/winprog64/registry-redirector">Registry Redirector（WOW6432Node へのレジストリ付け替え / Microsoft Learn）</a></li>
+        <li><a href="https://learn.microsoft.com/en-us/troubleshoot/windows-server/performance/compatibility-limitations-32-bit-programs-64-bit-system">Overview of the compatibility considerations for 32-bit programs on 64-bit Windows（Microsoft Learn）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
