@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>生成AI活用レベルはどう測る？ 内製開発の事業会社が押さえたい代表的な指標 — tech-memo</title>
+  <meta name="description" content="社内に生成AIツールを配ったものの「効果が出ているのか分からない」と悩む内製開発の事業会社向けに、活用レベルを測る代表的な指標を整理。利用の広さ（導入率・アクティブ率・提案受諾率）とDORA Four Keys、SPACEフレームワーク、組織の成熟度という4つの視点を、先行指標と遅行指標の考え方で初心者にも分かるよう解説する技術ノート。">
+  <meta name="article:category" content="ai">
+  <meta name="article:summary" content="生成AIを配ったのに効果が見えない。そんな内製開発の会社向けに、活用レベルを測る代表的な指標を、利用の広さ・DORA・SPACE・組織の成熟度という4つの視点で、先行指標と遅行指標の考え方から平易に整理する。">
+  <meta name="article:tags" content="生成AI,開発生産性,DORA,SPACE,内製開発,GitHub Copilot,指標">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+
+  <!-- この記事専用の軽量スタイル（指標の対比表）。テーマ変数に追従させ外部依存を持たない。 -->
+  <style>
+    .metric-table-wrap { overflow-x: auto; margin: 1.5rem 0; }
+    .metric-table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 560px;
+      font-size: 0.9rem;
+    }
+    .metric-table th,
+    .metric-table td {
+      border: 1px solid var(--color-border);
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    .metric-table thead th {
+      background: var(--color-bg-soft);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .metric-table tbody th {
+      background: var(--color-bg-soft);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>生成AI活用レベルはどう測る？ 内製開発の事業会社が押さえたい代表的な指標</h1>
+      <p class="note-meta">
+        <span class="badge badge--ai">AI</span>
+        <time datetime="2026-07-22">2026-07-22</time>
+      </p>
+
+      <p>
+        現場に GitHub Copilot やチャット型の生成AIを配ってしばらく経つと、たいてい経営層から同じ質問が飛んでくる。「で、結局どれくらい効果が出てるの？」。答えに詰まった経験のある人は多いと思う。ライセンス費用は毎月しっかり出ていくのに、成果のほうは肌感覚でしか語れない。この居心地の悪さが、活用レベルをきちんと測りたいという話につながっていく。
+      </p>
+      <p>
+        とくに外注中心から内製開発へ舵を切った事業会社では、この問いが重くのしかかる。「内製化して開発を自分たちの手に取り戻す」という判断の延長で生成AIを入れているぶん、その投資が本当に前に進んでいるのかを説明する責任が、社内に生まれるからだ。ここでは、生成AIの活用レベルを測るときによく使われる代表的な指標を、いくつかの視点に分けて整理する。ツール名や流行りの数字を並べるより、どういう考え方で指標を選ぶかのほうが長く役に立つはずなので、そこを軸にしたい。
+      </p>
+
+      <h2>まず「先行指標」と「遅行指標」に分けて考える</h2>
+      <p>
+        指標を語る前に、ひとつだけ土台になる区別を置いておきたい。先行指標（リーディング指標。原因に近い、早く動く数字）と遅行指標（ラギング指標。結果に近い、遅れて動く数字）の違いだ。すごく雑に言うと、先行指標は「アクセルを踏んでいるか」、遅行指標は「実際にどれだけ進んだか」を表す。
+      </p>
+      <p>
+        生成AIの活用でいえば、ツールの導入率や提案の受諾率は先行指標にあたる。使われているかどうかがすぐ数字に出る。一方で、開発チームがどれだけ速く安全にリリースできるようになったか、さらにその先の事業成果は遅行指標で、効果が数字に表れるまで時間がかかる。両方をつなげて眺めるのがコツで、片方だけを見ると判断を誤りやすい。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 560 150" style="--diagram-min-width: 380px" role="img" aria-labelledby="flow-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="flow-title">利用の広さという先行指標が、開発成果、そして事業成果という遅行指標へつながる流れ</title>
+          <defs>
+            <marker id="flow-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <rect class="node node--accent" x="15"  y="50" width="150" height="56" rx="8"/>
+          <rect class="node"          x="205" y="50" width="150" height="56" rx="8"/>
+          <rect class="node"          x="395" y="50" width="150" height="56" rx="8"/>
+          <text class="label" x="90"  y="74" text-anchor="middle">利用の広さ</text>
+          <text class="label label--muted" x="90"  y="92" text-anchor="middle">導入率・受諾率</text>
+          <text class="label" x="280" y="74" text-anchor="middle">開発成果</text>
+          <text class="label label--muted" x="280" y="92" text-anchor="middle">DORA・SPACE</text>
+          <text class="label" x="470" y="74" text-anchor="middle">事業成果</text>
+          <text class="label label--muted" x="470" y="92" text-anchor="middle">売上・品質</text>
+          <path class="arrow" d="M165 78 L205 78" marker-end="url(#flow-arrow)"/>
+          <path class="arrow" d="M355 78 L395 78" marker-end="url(#flow-arrow)"/>
+          <text class="label label--muted" x="90"  y="128" text-anchor="middle">先行指標</text>
+          <text class="label label--muted" x="470" y="128" text-anchor="middle">遅行指標</text>
+        </svg>
+        <figcaption>図1: 先行指標（左）から遅行指標（右）へ。近い数字ほど早く動き、遠い数字ほど遅れて効く。</figcaption>
+      </figure>
+
+      <h2>利用の広さを測る（先行指標）</h2>
+      <p>
+        いちばん手前にあるのが「そもそも使われているか」だ。ここで代表的なのが、導入率（付与したライセンスのうち実際に使っている人の割合）、アクティブ利用率（日次・週次で触っている人の数）、そして提案の受諾率（AIが出した補完のうち採用された割合）の3つになる。GitHub Copilot なら、管理者向けの利用メトリクス API から、アクティブユーザー数や受諾率、生成された行数といった値を取り出せる。
+      </p>
+      <p>
+        気をつけたいのは、受諾率をゴールにしてしまう危うさだ。受諾率は「提案がどれだけ的を射ているか」の目安にはなるが、高ければ高いほど良いという単純な数字ではない。中身をよく見ずにタブキーで受け入れているだけかもしれないし、言語やコードベースによって水準は大きく変わる。一般には3割前後が目安と語られることが多いものの、この数字を追い求めること自体が目的化すると、いわゆる虚栄の指標（見栄えは良いが意思決定に使えない数字）になってしまう。利用の広さは「入り口が開いているか」の確認にとどめ、成果の話は次の遅行指標に預けるのが健全だと思う。
+      </p>
+
+      <h2>開発成果を測る（DORA Four Keys）</h2>
+      <p>
+        開発チームのパフォーマンスを測る定番が、DORA（DevOps Research and Assessment）の Four Keys と呼ばれる4指標だ。もともとは生成AIとは関係なく、ソフトウェアデリバリーの実力を測る枠組みとして広く使われてきた。生成AIの効果を「開発の実際の成果」まで落として見たいときに、この4つが物差しになる。
+      </p>
+
+      <div class="metric-table-wrap">
+        <table class="metric-table">
+          <thead>
+            <tr>
+              <th scope="col">指標</th>
+              <th scope="col">何を見るか</th>
+              <th scope="col">速さ / 安定のどちら</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">デプロイ頻度</th>
+              <td>本番へどれだけ頻繁にリリースできているか</td>
+              <td>速さ</td>
+            </tr>
+            <tr>
+              <th scope="row">変更のリードタイム</th>
+              <td>コードを書いてから本番に届くまでの時間</td>
+              <td>速さ</td>
+            </tr>
+            <tr>
+              <th scope="row">変更失敗率</th>
+              <td>リリースのうち障害や切り戻しになった割合</td>
+              <td>安定</td>
+            </tr>
+            <tr>
+              <th scope="row">サービス復旧時間</th>
+              <td>障害が起きてから復旧するまでの時間</td>
+              <td>安定</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        面白いのは、生成AIを入れれば Four Keys が自動で良くなるとは限らない点だ。DORA が毎年出している State of DevOps レポートの近年版では、生成AIの利用が個人の生産性や仕事の満足度を押し上げる一方で、デリバリーの安定性やスループットにはむしろマイナスに働きうる、という一見ちぐはぐな結果が報告されている。理由のひとつとして指摘されているのが、AIで一度に書けてしまうぶん変更の粒が大きくなり、大きな変更ほどリスクが高いという昔からの経験則がそのまま効いてくること。個人の手元が速くなっても、チームのリリースが速く安全になるとは限らない。ここが先行指標と遅行指標を分けて見るべき理由そのものだ。
+      </p>
+
+      <h2>開発者体験を多面で測る（SPACE）</h2>
+      <p>
+        Four Keys がデリバリーの結果を見るのに対し、開発者の体験まで含めて多面的に測ろうというのが SPACE フレームワークだ。DORA の研究者でもある Nicole Forsgren らが2021年に提唱したもので、生産性を単一の数字で語ってはいけない、という問題意識から生まれている。頭文字が5つの観点を表す。
+      </p>
+      <ul>
+        <li>Satisfaction（満足度・幸福感）… 開発者が仕事や道具にどう感じているか</li>
+        <li>Performance（成果）… アウトプットが生んだ結果や品質</li>
+        <li>Activity（活動量）… コミットやレビューなど数えられる作業量</li>
+        <li>Communication・Efficiency（協働と効率）… 円滑に連携し、無駄な待ちなく流れているか</li>
+      </ul>
+      <p>
+        SPACE のいちばんの教えは「1つの次元だけで測るな」に尽きる。たとえば活動量（Activity）だけを追うと、コミット数を稼ぐ動きを誘発してしまう。生成AIの評価でも同じで、受諾率という活動量に、満足度アンケートや実際のデリバリー成果を組み合わせて初めて、バランスの取れた絵が見えてくる。全部の次元を測る必要はなく、自社の関心に合わせて2〜3個を選ぶ使い方で十分だとされている。
+      </p>
+
+      <h2>組織の成熟度という視点</h2>
+      <p>
+        ここまでは数字の指標だったが、もうひとつ「組織がどれだけ生成AIを使いこなす体になっているか」という成熟度の視点がある。個人的にはここがいちばん効くと思っている。DORA の近年のレポートでも、生成AIから成果を引き出せているチームには、明確な社内方針、質の高い内部データへのアクセス、小さく速いデリバリーの習慣といった組織側の土台が共通している、という分析が示されている。
+      </p>
+      <p>
+        裏を返すと、ツールを配って受諾率を眺めているだけでは成熟度は上がらない。内製開発の事業会社にとってはここが正念場で、AIに読ませられる形でドキュメントやコードが整理されているか、レビューやテストの仕組みが大きな変更を受け止められるか、といった地味な足腰づくりが、そのまま生成AIの効き目を左右する。数値目標を先に立てるより、この土台を一段ずつ上げていく発想のほうが、遠回りに見えて近い。</p>
+
+      <h2>じゃあ何から始めるか</h2>
+      <p>
+        指標を並べると全部測りたくなるが、最初から網羅しようとすると、たいてい計測そのものに疲れて続かない。現実的なのは、遅行指標を1つ（たとえば変更のリードタイム）決めて、それを説明できる先行指標を2〜3個（導入率と受諾率、開発者満足度あたり）ひも付ける、くらいの小さな出発点だ。そこから3か月ほど眺めて、先行指標が動いたときに遅行指標がついてきているかを確かめる。
+      </p>
+      <p>
+        逆にハマりやすいのが、受諾率だけを追う、あるいは生成された行数をそのまま成果とみなす、といった単一指標への偏りだ。行数は「たくさん書けた」ことは示しても「良いものを届けた」ことは示さない。正直に言うと、私自身もはじめは分かりやすい数字に飛びつきがちだった。指標は現場を映す鏡であって、鏡そのものを磨くのが目的ではない。そう思い出せるかどうかが、測定を続けられるかの分かれ目になる気がしている。
+      </p>
+
+      <h2>参考にした一次情報</h2>
+      <p>
+        本文で触れたフレームワークの出どころを、名前で挙げておく。いずれも各提供元の名称で検索すれば公式の解説にたどり着ける。
+      </p>
+      <ul>
+        <li>DORA（DevOps Research and Assessment）の State of DevOps レポート … Four Keys と、生成AIがデリバリーに与える影響の分析</li>
+        <li>N. Forsgren ほか「The SPACE of Developer Productivity」（ACM Queue, 2021）… SPACE フレームワークの原典</li>
+        <li>GitHub Docs の Copilot usage metrics … 受諾率・アクティブユーザー数などを取得する管理者向けAPIの仕様</li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
