@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>手元の Markdown ファイルで育てる第二の脳、Obsidian 入門 — tech-memo</title>
+  <meta name="description" content="ローカルの Markdown ファイルをそのままノートにする Obsidian の入門ノート。Vault の考え方、基本操作、内部リンクとバックリンク、グラフビュー、プラグイン、複数端末での同期までを初心者向けに整理する。">
+  <meta name="article:category" content="tools">
+  <meta name="article:summary" content="ノートを手元の Markdown ファイルとして持てるツール Obsidian を、Vault の考え方から内部リンク・バックリンク・グラフビュー・プラグイン・複数端末での同期まで、実際に触った所感を交えて初心者向けに整理する。">
+  <meta name="article:tags" content="Obsidian,Markdown,ノート,PKM">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>手元の Markdown ファイルで育てる第二の脳、Obsidian 入門</h1>
+      <p class="note-meta">
+        <span class="badge badge--tools">ツール</span>
+        <time datetime="2026-07-22">2026-07-22</time>
+      </p>
+
+      <p>
+        ノートアプリを乗り換えるたびにデータの移行で消耗した経験はないでしょうか。
+        サービスが終了したり有料化したりするたびに、書きためたメモが人質に
+        取られたような気分になります。<strong>Obsidian</strong>（オブシディアン）は
+        その悩みへの一つの答えとして人気を集めているノートツールです。中身は
+        手元のフォルダに置かれたただの Markdown ファイルで、アプリはそれを
+        読み書きする「ビューア兼エディタ」に徹しています。
+      </p>
+      <p>
+        このノートでは、Obsidian が普通のノートアプリと何が違うのかを起点に、
+        Vault という基本単位、内部リンクとバックリンク、それらを俯瞰する
+        グラフビュー、プラグインでの拡張、複数端末での同期までを初心者向けに
+        整理します。筆者が個人メモ用に数か月使ってみた所感も交えます。
+      </p>
+
+      <h2>一番の特徴は「ノートがただの Markdown ファイル」であること</h2>
+      <p>
+        Obsidian の最大の特徴は、機能の多さよりもむしろ
+        <strong>データの持ち方</strong>にあります。よくあるノートアプリは、
+        書いた内容をそのサービスのクラウドや独自形式のデータベースに保存します。
+        便利な反面、そのサービスがなくなればデータの取り出しに苦労します。
+      </p>
+      <p>
+        Obsidian はそこを反転させていて、ノート 1 枚が
+        <code>.md</code> という拡張子のテキストファイル 1 個に対応します。
+        保存先は自分のパソコンの中の、ごく普通のフォルダです。Obsidian を
+        使わなくなっても、ファイルはメモ帳でも VS Code でも開けます。すごく雑に
+        言うと、Obsidian は「フォルダの中の Markdown ファイル群を、リンクや
+        検索で扱いやすくしてくれる皮」のようなものです。
+      </p>
+
+      <h3>ノートをまとめる入れ物「Vault」</h3>
+      <p>
+        Obsidian では、ノートをしまう一番外側のフォルダを
+        <strong>Vault</strong>（ヴォールト、金庫の意味）と呼びます。名前こそ
+        大げさですが、実体は自分で選んだただのフォルダです。その中に
+        <code>.md</code> ファイルや画像を置き、さらにサブフォルダで整理できます。
+        Vault は複数作れるので、「仕事用」「日記用」のように用途で分けて
+        持つ人もいます。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 640 250" style="--diagram-min-width: 450px" role="img" aria-labelledby="vault-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="vault-title">Vault は自分のパソコン上のただのフォルダで、中に Markdown ファイルや画像が入っている。Obsidian アプリはそのフォルダを読み書きするだけで、データそのものはローカルに残る。</title>
+          <defs>
+            <marker id="vault-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <rect class="node" x="20" y="30" width="300" height="200" rx="12"/>
+          <text class="label" x="40" y="58">Vault（ただのフォルダ）</text>
+          <rect class="node node--accent" x="45" y="75"  width="120" height="40" rx="6"/>
+          <rect class="node node--accent" x="45" y="125" width="120" height="40" rx="6"/>
+          <rect class="node node--accent" x="45" y="175" width="120" height="40" rx="6"/>
+          <text class="label label--muted" x="105" y="100" text-anchor="middle">日記.md</text>
+          <text class="label label--muted" x="105" y="150" text-anchor="middle">読書メモ.md</text>
+          <text class="label label--muted" x="105" y="200" text-anchor="middle">画像/</text>
+          <text class="label label--muted" x="240" y="130" text-anchor="middle">…</text>
+
+          <rect class="node" x="440" y="90" width="180" height="80" rx="10"/>
+          <text class="label" x="530" y="125" text-anchor="middle">Obsidian</text>
+          <text class="label label--muted" x="530" y="147" text-anchor="middle">読み書きする皮</text>
+
+          <path class="arrow" d="M440 130 L320 130" marker-end="url(#vault-arrow)"/>
+          <text class="label label--muted" x="380" y="118" text-anchor="middle">開く</text>
+        </svg>
+        <figcaption>図1: Vault は自分のディスク上のただのフォルダ。Obsidian はその中の Markdown ファイルを読み書きするだけで、データはローカルに残り続ける。</figcaption>
+      </figure>
+
+      <h2>まずは書くところまで</h2>
+      <p>
+        始め方はシンプルです。公式サイトからアプリをインストールして起動すると、
+        最初に「Vault を作るか、既存フォルダを開くか」を聞かれます。空の
+        フォルダを新しい Vault として指定すれば、それで準備は完了です。あとは
+        新規ノートを作り、本文を書いていきます。
+      </p>
+      <p>
+        本文は Markdown で書きます。見出しは <code>#</code>、箇条書きは
+        <code>-</code>、強調は <code>**太字**</code>、といった具合です。
+        Obsidian の編集画面は、記法を書くとその場で見た目が整う
+        「ライブプレビュー」が既定なので、いちいちプレビュー画面に切り替え
+        なくても書きながら結果を確認できます。Markdown を触ったことがなくても、
+        使ううちに数個の記号を覚えれば十分に書けるようになります。
+      </p>
+      <pre><code class="language-markdown"># 今日の作業ログ
+
+## 気づいたこと
+- Obsidian のノートはただの .md ファイル
+- だから Git で履歴も残せる
+
+**重要**: バックアップは自分の責任で取る
+</code></pre>
+      <p>
+        画像を貼りたいときは、ファイルを編集画面にドラッグするだけです。画像は
+        Vault の中にコピーされ、本文にはその参照が埋め込まれます。ここでも
+        「実体は Vault フォルダの中のファイル」という原則は変わりません。
+      </p>
+
+      <h2>Obsidian の主役は内部リンクとバックリンク</h2>
+      <p>
+        ここからが Obsidian を単なる Markdown エディタと分けるところです。
+        ノートの中で <code>[[ノート名]]</code> と二重の角かっこで囲むと、別の
+        ノートへの<strong>内部リンク</strong>になります。書いている途中で
+        <code>[[</code> と打つと候補が出るので、そこから選べます。まだ存在しない
+        ノート名を書いてもよく、その場合はリンクをたどった時点で空のノートが
+        生まれます。思いついた関連語を先にリンクとして書き散らし、あとから
+        中身を埋めていく、という書き方ができます。
+      </p>
+      <p>
+        内部リンクの本当の価値は、その逆向きにあります。ノート A から
+        ノート B へリンクを張ると、B 側の画面には「A からリンクされています」と
+        いう<strong>バックリンク</strong>が自動で表示されます。自分でリンクを
+        張り返す必要はありません。あるテーマのノートを開くだけで、それに
+        言及している他のノートが一覧できるわけです。知識がリンクでゆるく
+        つながり、あとから思わぬ関連が見えてくる。この感覚が
+        「第二の脳（Second Brain）」と呼ばれるゆえんです。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 620 230" style="--diagram-min-width: 440px" role="img" aria-labelledby="link-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="link-title">ノート「読書メモ」から「Obsidian」へ内部リンクを張ると、Obsidian 側には読書メモからのバックリンクが自動で表示される。リンクを張った側だけが手を動かせばよい。</title>
+          <defs>
+            <marker id="link-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <rect class="node node--accent" x="30"  y="70" width="180" height="90" rx="10"/>
+          <text class="label" x="120" y="105" text-anchor="middle">読書メモ.md</text>
+          <text class="label label--muted" x="120" y="130" text-anchor="middle">[[Obsidian]] と記述</text>
+
+          <rect class="node" x="410" y="70" width="180" height="90" rx="10"/>
+          <text class="label" x="500" y="100" text-anchor="middle">Obsidian.md</text>
+          <text class="label label--muted" x="500" y="123" text-anchor="middle">バックリンク欄に</text>
+          <text class="label label--muted" x="500" y="141" text-anchor="middle">「読書メモ」が出る</text>
+
+          <path class="arrow" d="M210 100 L410 100" marker-end="url(#link-arrow)"/>
+          <text class="label label--muted" x="310" y="88" text-anchor="middle">内部リンク（手で張る）</text>
+          <path class="arrow" d="M410 140 L210 140" marker-end="url(#link-arrow)"/>
+          <text class="label label--muted" x="310" y="165" text-anchor="middle">バックリンク（自動）</text>
+        </svg>
+        <figcaption>図2: リンクは片側で張れば、反対側には自動でバックリンクが現れる。手間をかけずに双方向のつながりができる。</figcaption>
+      </figure>
+
+      <p>
+        リンク以外に、<code>#タグ</code> の形でノートを横断的に分類する
+        タグ機能もあります。フォルダで階層的に整理するか、リンクとタグで
+        ゆるくつなぐか、あるいは両方を併用するか。ここは正解がなく、自分の
+        頭に合うやり方を探る部分です。個人的には、最初はフォルダをほとんど
+        作らず、リンクとタグだけで運用するほうが破綻しにくいと感じました。
+      </p>
+
+      <h2>グラフビューで全体を眺める</h2>
+      <p>
+        ノート同士のリンク関係を、点と線の図として可視化するのが
+        <strong>グラフビュー</strong>です。ノートが点、リンクが線になり、
+        よくリンクされているノートほど中心に集まって見えます。見た目が
+        派手なので Obsidian の看板機能として紹介されがちですが、正直に言うと
+        ノートが数十枚くらいまでは実用的な価値は薄く、眺めて楽しい程度です。
+      </p>
+      <p>
+        真価が出てくるのはノートが数百枚に育ってからで、「この話題の
+        まわりだけ孤立している」「意外な二つのテーマがつながっている」と
+        いった構造上の気づきが得られるようになります。最初から使いこなそうと
+        気負わず、ノートがたまってきたら開いてみる、くらいの距離感で
+        十分です。
+      </p>
+
+      <h2>プラグインで足りない機能を足す</h2>
+      <p>
+        Obsidian の素の状態はあえて機能を絞ってあり、必要な機能は
+        プラグインで足していく設計です。プラグインには 2 種類あります。
+      </p>
+      <ul>
+        <li><strong>コアプラグイン</strong>：Obsidian に最初から入っている
+          公式機能。グラフビューやバックリンク、後述のノートを毎日作る
+          デイリーノートなどがこれにあたり、設定でオン・オフする。</li>
+        <li><strong>コミュニティプラグイン</strong>：有志が開発して公開している
+          拡張。カレンダー表示、カンバンボード、高機能な検索など種類が豊富で、
+          アプリ内のマーケットから検索して入れられる。</li>
+      </ul>
+      <p>
+        コミュニティプラグインは第三者が作ったものなので、入れる前にどんな
+        権限で何をするかは気に留めておきたいところです。とはいえ最初から
+        あれこれ盛る必要はありません。しばらく素のまま使い、「これが欲しい」と
+        具体的に困ってから探すほうが、自分に本当に要る拡張だけが残ります。
+      </p>
+
+      <h2>複数の端末で使うには</h2>
+      <p>
+        Obsidian 本体は個人利用なら無料で、Vault はローカルに置かれます。
+        では複数の端末で同じノートを見たいときはどうするか。方法はいくつか
+        あります。
+      </p>
+      <ul>
+        <li><strong>公式の Obsidian Sync</strong>：有料のサブスクリプション。
+          Vault を暗号化して端末間で同期する。設定が楽で、開発元を支援する
+          意味合いもある。</li>
+        <li><strong>汎用のクラウド同期</strong>：Vault フォルダを普段使いの
+          クラウドストレージの同期対象に置く方法。手軽な一方、複数端末で同時に
+          編集するとファイルが衝突することがある。</li>
+        <li><strong>Git で管理</strong>：中身がテキストファイルなので、Git で
+          バージョン管理する人もいる。差分や履歴が残るのが利点。</li>
+      </ul>
+      <p>
+        どれを選んでも、データの実体が自分の手元の Markdown ファイルである
+        点は変わりません。ちなみに、書いたノートを Web ページとして公開する
+        <strong>Obsidian Publish</strong> という別の有料サービスもあります。
+      </p>
+
+      <h2>どんな人に向くか</h2>
+      <p>
+        Obsidian が特に合うのは、長く使い続けるメモをデータとして自分の手元に
+        置いておきたい人、断片的な知識をリンクでつないで育てたい人です。
+        Markdown で書くことに抵抗がなければ、学習コストの割に得られるものは
+        大きいと思います。
+      </p>
+      <p>
+        逆に、リアルタイムで複数人が同じノートを共同編集したい用途や、とにかく
+        考えずに使える手軽さを最優先したい場合は、クラウド前提の他のツールの
+        ほうが向きます。Obsidian は「自分でデータを持ち、自分で管理する」ことと
+        引き換えに自由度を得るツールなので、その手間を楽しめるかどうかが
+        分かれ目になります。まずは無料で試せるので、空の Vault を一つ作って
+        数日メモを取ってみるのが、向き不向きを確かめる一番の近道です。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://obsidian.md/">Obsidian 公式サイト</a></li>
+        <li><a href="https://help.obsidian.md/Home">Obsidian Help（公式ドキュメント）</a></li>
+        <li><a href="https://obsidian.md/plugins">Community plugins（公式のプラグイン一覧）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
