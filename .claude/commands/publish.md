@@ -23,6 +23,8 @@ argument-hint: <slug>（notes/_drafts/<slug>.html の slug）
 
 2. **公開前チェック**
    - `notes/_drafts/<slug>.html` を読み、`PUBLISHING_CHECKLIST.md` の全項目を確認する。
+   - **`writing-guide` スキルの禁止リストと照合して文体をセルフレビュー**する
+     （太字・ダッシュ区切りの多用、冗長表現、体言止めの連続、均等網羅リスト等）。気になる箇所は公開前に直す。
    - 個人情報・社内情報・鍵・未確認URL が無いか最終確認する。問題があれば公開せず指摘する。
    - メタデータが揃っているか確認する: `article:category`（必須）, `article:summary`（必須）, `article:tags`（任意）。
 

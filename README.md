@@ -19,6 +19,9 @@ pre-commit run --all-files  # 初回: 全ファイルに対して手動実行
 追加手順、公開前の必須チェックは [AGENTS.md](./AGENTS.md) を参照してください。
 公開前には [PUBLISHING_CHECKLIST.md](./PUBLISHING_CHECKLIST.md) を毎回確認します。
 
+記事本文の文体は `writing-guide` スキル（[.claude/skills/writing-guide/SKILL.md](./.claude/skills/writing-guide/SKILL.md)）に
+まとめています。`/draft`・`/publish` で執筆・レビューする際の品質チェックリストとして使います。
+
 ## ガードレール構成
 
 - ローカル: pre-commit + gitleaks（このリポジトリ）
