@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Checkout
         # SHA 固定（サプライチェーン対策）。バージョンは末尾コメント / Dependabot が更新。
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # gitleaks が PR の差分（コミット範囲）を走査できるよう全履歴を取得する
           fetch-depth: 0
@@ -26,7 +26,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Link check (lychee)
-        uses: lycheeverse/lychee-action@8646ba30535128ac92d33dfc9133794bfdd9b411 # v2.8.0
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
           # 公開対象の HTML 内リンク切れを検出する
           args: --no-progress './**/*.html'
