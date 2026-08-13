@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Docker SandboxesでAIエージェントを安全に自律実行する仕組み — tech-memo</title>
+  <meta name="description" content="Dockerが発表した「Docker Sandboxes」を、AIコーディングエージェントの隔離環境という切り口で解説する。マイクロVMアーキテクチャの仕組みと、従来のコンテナ・フルVMとの違いを整理した技術ノート。">
+  <meta name="article:category" content="infra">
+  <meta name="article:summary" content="Dockerが発表したDocker Sandboxesは、AIコーディングエージェントを専用カーネルのマイクロVMに閉じ込め、権限プロンプトなしの自律実行を安全にする機能。コンテナ・フルVMとの違いを仕組みから整理する。">
+  <meta name="article:tags" content="Docker,microVM,AIエージェント,コンテナ,仮想化">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>Docker SandboxesでAIエージェントを安全に自律実行する仕組み</h1>
+      <p class="note-meta">
+        <span class="badge badge--infra">インフラ</span>
+        <time datetime="2026-08-13">2026-08-13</time>
+      </p>
+
+      <p>
+        Claude CodeやCodex CLIのようなAIコーディングエージェントは、便利さと引き換えに
+        物騒な一面を持っています。ファイルを書き換え、パッケージをインストールし、
+        ときにはシェルコマンドを自分で組み立てて実行する。しかも多くの開発者は
+        「毎回の確認プロンプトが面倒だ」という理由で、確認なしにコマンドを実行させる
+        いわゆる<strong>YOLOモード</strong>（<code>--dangerously-skip-permissions</code>
+        のような、危険を承知で全操作を許可するオプション）をオンにしがちです。
+        エージェントが賢くなるほど、この「自律性とリスクのトレードオフ」は無視できなくなります。
+      </p>
+      <p>
+        この課題にDockerが出した答えが<strong>Docker Sandboxes</strong>です。2026年1月30日、
+        既存のプレビュー機能を土台に、マイクロVMという仮想化技術で隔離境界を作り直した
+        新版を発表しました。本ノートでは、AIエージェントの隔離環境という切り口から、
+        Docker Sandboxesの仕組みと、従来のコンテナ・仮想マシン（VM）との違いを整理します。
+      </p>
+
+      <h2>隔離の基礎知識をおさらいする</h2>
+      <p>
+        Docker Sandboxesを理解するには、まずプログラムを外の世界から閉じ込める手段に
+        どんな選択肢があるかを知っておく必要があります。細かい方式はいくつもありますが、
+        押さえるべき軸は「OSのカーネル（<strong>用語補足：</strong>ハードウェアを直接
+        操作し、プロセスやメモリを管理するOSの中核部分）を共有するかどうか」です。
+      </p>
+      <ul>
+        <li><strong>コンテナ</strong>：ホストOSのカーネルを複数のプロセスで共有し、
+          名前空間（namespace）やcgroupという仕組みでファイルやプロセスの見え方だけを
+          分離する。起動はミリ秒単位で速いが、カーネルという急所は1つしかない。</li>
+        <li><strong>仮想マシン（VM）</strong>：ハイパーバイザーの上にゲストOSを丸ごと
+          1台動かし、カーネルごと独立させる。隔離は強いが、ゲストOSの起動待ちがあり
+          数十秒かかることも珍しくない。</li>
+        <li><strong>マイクロVM</strong>：VMと同じく専用カーネルを持たせつつ、
+          デバイスエミュレーションなど不要な部分を削ぎ落として、起動をコンテナに近い
+          速度まで縮めた軽量な仮想マシン。AWSのFirecrackerが有名な実装です。</li>
+      </ul>
+      <p>
+        コンテナが速くて隔離が甘く、VMは隔離が強くて遅い。この二択にずっと悩まされてきた
+        領域に、マイクロVMというもう一つの選択肢が育ってきた、というのがここ数年の流れです。
+      </p>
+
+      <h2>Dockerが発表したSandboxesとは</h2>
+      <p>
+        Docker Sandboxesは、AIコーディングエージェントを1つずつ専用の使い捨て環境に
+        閉じ込めるための機能です。Claude Code、Codex CLI、Copilot CLI、Gemini CLI、
+        OpenCode、Kiroといった主要なエージェントに対応しており、エージェントがサンドボックス内で
+        パッケージを入れたり設定ファイルを書き換えたり、ファイルを削除したりしても、
+        ホスト側のファイルシステムには一切影響しません。
+      </p>
+      <p>
+        導入はパッケージマネージャ経由で、公式ドキュメントには次のようなコマンドが
+        案内されています（Linux版はUbuntu向け）。
+      </p>
+      <pre><code># macOS
+brew trust docker/tap &amp;&amp; brew install docker/tap/sbx
+
+# Windows
+winget install Docker.sbx
+
+# Linux（Ubuntu）
+curl -fsSL https://get.docker.com | sudo REPO_ONLY=1 sh
+sudo apt-get install docker-sbx</code></pre>
+      <p>
+        エージェントに何を触らせてよいかは、<strong>Sandbox Kits</strong>と呼ばれる設定で
+        あらかじめ決めておきます。使えるツール、通信を許可するドメインのリスト、
+        起動時に注入する環境変数や認証情報などを事前定義しておき、エージェント自身が
+        その場の判断で境界を広げることはできません。エージェントが暴走しても、
+        数秒でサンドボックスごと削除して作り直せるのも実務上はありがたいポイントです。
+        壊れたら直すのではなく、捨てて作り直す発想です。
+      </p>
+
+      <h2>マイクロVMが隔離境界を作る仕組み</h2>
+      <p>
+        Docker Sandboxesの核心は、サンドボックスの実体がコンテナではなくマイクロVMだという
+        点にあります。各サンドボックスは自分専用のLinuxカーネルを持ち、内部にはホストとは
+        別の独立したDockerデーモンが動きます。だからこそエージェントはサンドボックスの中で
+        <code>docker build</code>や<code>docker compose up</code>を自由に実行でき、
+        しかもホスト側のDockerソケットには一切触れません。
+      </p>
+      <p>
+        これはいわゆる<strong>Docker-in-Docker</strong>問題への回答でもあります。コンテナの中で
+        さらにコンテナを動かそうとすると、従来は<code>--privileged</code>でホストの権限を
+        分け与える必要があり、それは事実上ホストへの脱出路を開けることと同じでした。
+        マイクロVMなら、中で何が起きてもカーネルの境界の外には出られません。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 640 260" style="--diagram-min-width: 460px" role="img" aria-labelledby="sbx-arch-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="sbx-arch-title">Docker Sandboxesのアーキテクチャ。ホストの中に専用カーネルを持つマイクロVMがあり、その中でAIエージェントと独立したDockerデーモンが動く。ホストとマイクロVMの境界は越えられない。</title>
+          <defs>
+            <marker id="sbx-arch-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- ホスト全体 -->
+          <rect class="node" x="20" y="20" width="600" height="220" rx="10"/>
+          <text class="label label--muted" x="40" y="46" text-anchor="start">ホストマシン</text>
+
+          <!-- マイクロVM -->
+          <rect class="node node--accent" x="60" y="66" width="520" height="150" rx="10"/>
+          <text class="label" x="80" y="90" text-anchor="start">マイクロVM（専用カーネル・サンドボックス1個ぶん）</text>
+
+          <!-- エージェント -->
+          <rect class="node" x="90" y="108" width="200" height="80" rx="8"/>
+          <text class="label" x="190" y="140" text-anchor="middle">AIエージェント</text>
+          <text class="label label--muted" x="190" y="160" text-anchor="middle">(Claude Code等)</text>
+
+          <!-- Docker daemon -->
+          <rect class="node" x="330" y="108" width="220" height="80" rx="8"/>
+          <text class="label" x="440" y="140" text-anchor="middle">独立したDockerデーモン</text>
+          <text class="label label--muted" x="440" y="160" text-anchor="middle">docker build / run / compose</text>
+
+          <path class="arrow" d="M290 148 L330 148" marker-end="url(#sbx-arch-arrow)"/>
+
+          <text class="label label--muted" x="320" y="234" text-anchor="middle">↑ カーネル境界（脱出不可） ホストのDockerソケットへは到達できない</text>
+        </svg>
+        <figcaption>図1: マイクロVM内にエージェントと独立したDockerデーモンが同居する。ホストへ抜け出す経路自体が存在しない。</figcaption>
+      </figure>
+
+      <h2>コンテナ・フルVMとの違い</h2>
+      <p>
+        隔離の強さと起動の速さはトレードオフになりやすく、これまでの代表的な手法を並べると
+        傾向がよく見えます。Dockerが自社ブログで示している比較によると、
+        chroot（ファイルシステムだけの隔離）は一瞬で起動するもののrootユーザーがいれば
+        抜け出せてしまい、systemd-nspawnやgVisorはその中間、コンテナはカーネル共有ゆえに
+        Docker-in-Dockerで弱くなる、フルVMは隔離こそ最強だが1台あたり数GBのメモリを食い、
+        起動に30〜60秒かかるとされています。
+      </p>
+      <p>
+        マイクロVMはこの並びの中で、フルVM相当の「専用カーネル」という隔離強度を保ったまま、
+        起動時間だけをコンテナに近い数秒レベルまで切り詰めた立ち位置です。Docker Sandboxesが
+        独自のVMM（仮想マシンモニタ）をわざわざ開発したのも、この起動速度を稼ぐためでした。
+        Firecrackerのような既存の実装はLinux／KVM前提で作られており、開発者が日常的に使う
+        macOSやWindowsでネイティブに動きません。そこでDockerは、macOSなら
+        Hypervisor.framework、WindowsならWindows Hypervisor Platform、LinuxならKVMを
+        それぞれ直接叩く形で自前のVMMを実装し、翻訳レイヤーを挟まずに3プラットフォームで
+        同じ体験を実現しています。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 760 200" style="--diagram-min-width: 560px" role="img" aria-labelledby="sbx-spectrum-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="sbx-spectrum-title">隔離の強さと起動時間の関係。コンテナは隔離が弱く起動が速い。フルVMは隔離が強く起動が遅い。Docker SandboxesのマイクロkVMはフルVM並みの隔離を保ちながらコンテナに近い起動速度を実現している。</title>
+          <defs>
+            <marker id="sbx-spectrum-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="node" x="20"  y="60" width="150" height="70" rx="8"/>
+          <rect class="node" x="210" y="60" width="150" height="70" rx="8"/>
+          <rect class="node node--accent" x="400" y="60" width="170" height="70" rx="8"/>
+          <rect class="node" x="610" y="60" width="130" height="70" rx="8"/>
+
+          <text class="label" x="95"  y="88"  text-anchor="middle">コンテナ</text>
+          <text class="label label--muted" x="95" y="106" text-anchor="middle">隔離:弱 / 起動:ms</text>
+
+          <text class="label" x="285" y="88"  text-anchor="middle">gVisor</text>
+          <text class="label label--muted" x="285" y="106" text-anchor="middle">隔離:中 / 起動:&lt;1s</text>
+
+          <text class="label" x="485" y="82"  text-anchor="middle">Docker Sandboxes</text>
+          <text class="label label--muted" x="485" y="100" text-anchor="middle">（マイクロVM）</text>
+          <text class="label label--muted" x="485" y="118" text-anchor="middle">隔離:強 / 起動:数秒</text>
+
+          <text class="label" x="675" y="88"  text-anchor="middle">フルVM</text>
+          <text class="label label--muted" x="675" y="106" text-anchor="middle">隔離:最強 / 起動:30〜60s</text>
+
+          <path class="arrow" d="M170 95 L210 95" marker-end="url(#sbx-spectrum-arrow)"/>
+          <path class="arrow" d="M360 95 L400 95" marker-end="url(#sbx-spectrum-arrow)"/>
+          <path class="arrow" d="M570 95 L610 95" marker-end="url(#sbx-spectrum-arrow)"/>
+
+          <text class="label label--muted" x="380" y="170" text-anchor="middle">右に行くほど隔離は強いが、これまでは起動も遅くなっていた</text>
+        </svg>
+        <figcaption>図2: Docker Sandboxesは、フルVM相当の隔離を保ちながらコンテナに近い起動速度を狙う位置取り。</figcaption>
+      </figure>
+
+      <h2>AIエージェントの隔離環境としての使い方</h2>
+      <p>
+        AIエージェント向けという文脈で見ると、Docker Sandboxesが解決しているのは
+        「性善説に頼らないと自律実行させられない」という状態そのものです。従来、
+        エージェントに強い権限を与えるかどうかは、結局「このエージェントは変なコマンドを
+        打たないはずだ」という信頼に頼っていました。Sandbox Kitsでファイルアクセス範囲や
+        通信先ドメインをあらかじめ強制しておけば、エージェントが指示を誤読しようが、
+        プロンプトインジェクションに引っかかろうが、境界の外には出られません。
+        信頼を前提にするのではなく、境界をインフラ側で強制する発想です。
+      </p>
+      <p>
+        実務での使い方はおおむね次のような流れになります。開発者はSandbox Kitで
+        「このプロジェクトディレクトリだけ読み書き可、通信は社内APIとパッケージレジストリのみ許可」
+        のように境界を定義し、その中でエージェントをYOLOモードのまま自由に走らせます。
+        想定外の挙動があればサンドボックスごと数秒で捨てて作り直せばよく、ホスト環境の
+        再セットアップという手間からは解放されます。複数のエージェントを並行して走らせても、
+        それぞれが独立したマイクロVMに入っているため互いに干渉しません。
+      </p>
+
+      <h2>気になる点</h2>
+      <p>
+        良いことずくめに見えますが、素直に気になる点もいくつかあります。まず、
+        マイクロVM化は無料ではありません。コンテナよりは重く、専用カーネルを起動する分の
+        リソースは確実に消費します。数を並行して走らせる規模になるほど、この差は
+        効いてくるはずです。
+      </p>
+      <p>
+        もう一つは、隔離が万能ではないという当たり前の事実です。ネットワークの許可リストに
+        入っているドメインであれば、エージェントはそこと自由に通信できます。つまり
+        「許可した通信経路」を通じた情報の持ち出し自体は、サンドボックスの外にいるのと
+        変わらず可能です。隔離はホストへの被害を防ぐものであって、許可した範囲の中での
+        判断ミスまでは守ってくれません。Sandbox Kitの設定を雑に書けば、その分だけ
+        隔離の意味は薄れます。
+      </p>
+      <p>
+        独自VMMを一から実装するという判断も、正直やや大胆に映ります。Firecrackerのような
+        枯れた実装に乗らず自前で持つのは、3プラットフォームを同じ体験で揃えるためという
+        狙いは理解できるものの、長期的なメンテナンス負荷を丸ごと引き受ける選択でもあります。
+        AIエージェントの実行基盤という、ここ数年で急に重要度が上がった領域だからこそ
+        踏み切れた投資なのかもしれません。
+      </p>
+
+      <h2>境界をインフラ側に持たせるという発想</h2>
+      <p>
+        コンテナとVMのあいだにマイクロVMという第三の選択肢が育ち、それをAIエージェントの
+        自律実行という新しい需要が後押しした、というのがDocker Sandboxesの成り立ちです。
+        エージェントに強い権限を渡すこと自体は、もう避けられない流れになりつつあります。
+        だとすれば問われるのは、その権限をどこまで信頼に頼らず、インフラの側で
+        機械的に縛れるか。Docker Sandboxesは、その問いに対する現時点でのわりと
+        説得力のある答えの一つだと思います。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://www.docker.com/blog/docker-sandboxes-run-claude-code-and-other-coding-agents-unsupervised-but-safely/">Docker Blog: Docker Sandboxes: Run Claude Code and More Safely（発表内容・対応エージェント・Sandbox Kitsの解説）</a></li>
+        <li><a href="https://www.docker.com/blog/why-microvms-the-architecture-behind-docker-sandboxes/">Docker Blog: Why MicroVMs: The Architecture Behind Docker Sandboxes（マイクロVM採用の理由と独自VMMの設計）</a></li>
+        <li><a href="https://www.docker.com/blog/comparing-sandboxing-approaches-ai-agents/">Docker Blog: Comparing Sandboxing Approaches for AI Agents（chroot・gVisor・VM等との比較データ）</a></li>
+        <li><a href="https://www.docker.com/products/docker-sandboxes/">Docker: Docker Sandboxes 製品ページ（インストール方法・対応OS・対応エージェント一覧）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
