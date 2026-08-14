@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPT-5.6 Sol Ultrafastを支えるCerebras、ウェハーを切らないAIチップの話 — tech-memo</title>
+  <meta name="description" content="OpenAIがGPT-5.6 Sol向けに発表したUltrafastモードは、Cerebrasのウェハースケールチップで動いている。LLM推論がメモリ帯域で詰まる理由から、ウェハーを切り分けない設計の狙いまでを整理した技術ノート。">
+  <meta name="article:category" content="ai">
+  <meta name="article:summary" content="OpenAIがGPT-5.6 Sol Ultrafastを発表した。最大750トークン/秒という速度を支えるのはCerebrasのウェハースケールチップ。LLM推論がメモリ帯域で詰まる理由から、ウェハーを切らない設計の狙いまで整理する。">
+  <meta name="article:tags" content="Cerebras,LLM推論,GPT-5.6,メモリ帯域,AIチップ">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>GPT-5.6 Sol Ultrafastを支えるCerebras、ウェハーを切らないAIチップの話</h1>
+      <p class="note-meta">
+        <span class="badge badge--ai">AI</span>
+        <time datetime="2026-08-14">2026-08-14</time>
+      </p>
+
+      <p>
+        2026年8月13日、OpenAIがGPT-5.6 Solの新しい提供形態として
+        <strong>Ultrafastモード</strong>をプレビュー公開しました。同じモデル、同じ賢さのまま、
+        出力が最大14倍速く、ピークで毎秒750トークンを吐き出すという内容です。
+        モデルそのものは変わっていないのに速度だけ跳ね上がる、という話なので、
+        面白いのは当然「何の上で動かしたのか」の部分になります。
+      </p>
+      <p>
+        答えはCerebras（セレブラス）というアメリカの半導体企業のチップでした。
+        名前は聞いたことがあっても、何がどう違うのかまでは知らない、という人が
+        多い会社だと思います。私も「やたら大きいチップを作っているところ」くらいの
+        認識でした。このノートでは、LLMの推論がなぜ遅くなるのかという基礎から入って、
+        Cerebrasがそこに何をぶつけたのかを整理します。
+      </p>
+
+      <h2>そもそも「推論が速い」とは何が速いのか</h2>
+      <p>
+        LLMの速さには、大きく分けて2種類あります。ひとつは質問を投げてから最初の1文字が
+        返ってくるまでの時間（TTFT、Time To First Token）。もうひとつが、そこから
+        文章が流れ出す速度、つまり毎秒何トークン生成できるかです。今回の750トークン/秒は
+        後者の話で、日本語なら400字詰め原稿用紙をおよそ1秒で埋めていくくらいの勢いになります。
+      </p>
+      <p>
+        人間が読む速度をとっくに超えているので、一見すると過剰に思えます。ただ、
+        いまのモデルは答える前に長い思考（reasoning）を挟むようになりました。
+        ユーザーの目に見えない思考トークンを何千と生成してから初めて回答を書き始めるので、
+        生成速度がそのまま体感の待ち時間に直結します。エージェントのように
+        モデルを何十回も呼び出す使い方だと、この差はさらに積み上がります。
+        速度がUXの問題から、実用可能かどうかの問題に変わってきた、という背景があります。
+      </p>
+
+      <h2>推論が詰まるのはメモリ帯域</h2>
+      <p>
+        ここからが本題です。LLMがトークンを1つ生成するとき、計算機の中では何が起きているか。
+        ざっくり言うと、<strong>モデルの重み（パラメータ）を全部読み出して、入力ベクトルと
+        掛け算する</strong>という処理をしています。そして重要なのは、これが1トークンごとに
+        繰り返されるという点です。100トークン生成するなら、重みを100回読み直します。
+      </p>
+      <p>
+        なぜ読み直しが必要かというと、生成が逐次的だからです。次の1文字は前の文字が
+        決まらないと計算できないので、まとめて処理して読み出しを節約する、という手が使えません。
+        結果として、GPUの演算器はほとんどの時間、メモリからデータが届くのを待って遊んでいます。
+      </p>
+      <p>
+        この不均衡は数字にするとはっきりします。FP16では重み1バイトあたりの計算量が
+        だいたい1演算しかありません。一方、いまのAI向けGPUはメモリ帯域1バイトあたり
+        数百演算ぶんの計算能力を持っています。演算器が余っていて、データを運ぶ管が細い。
+        いわゆる<strong>メモリウォール</strong>と呼ばれる状態です。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 660 240" style="--diagram-min-width: 470px" role="img" aria-labelledby="memwall-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="memwall-title">GPUでの推論の様子。チップの外にあるHBMからモデルの重みを1トークンごとに全部読み出す必要があり、細いメモリ帯域が演算器の待ち時間を生んでいる。</title>
+          <defs>
+            <marker id="memwall-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="node" x="20" y="60" width="200" height="120" rx="10"/>
+          <text class="label" x="120" y="100" text-anchor="middle">HBM（チップ外メモリ）</text>
+          <text class="label label--muted" x="120" y="124" text-anchor="middle">モデルの重み 数十〜数百GB</text>
+          <text class="label label--muted" x="120" y="148" text-anchor="middle">帯域 3.35〜8 TB/s</text>
+
+          <rect class="node node--accent" x="420" y="60" width="200" height="120" rx="10"/>
+          <text class="label" x="520" y="106" text-anchor="middle">演算器</text>
+          <text class="label label--muted" x="520" y="132" text-anchor="middle">たいてい待っている</text>
+
+          <path class="arrow" d="M220 120 L420 120" marker-end="url(#memwall-arrow)"/>
+          <text class="label label--muted" x="320" y="106" text-anchor="middle">1トークンごとに</text>
+          <text class="label label--muted" x="320" y="150" text-anchor="middle">重みを全部運ぶ</text>
+
+          <text class="label label--muted" x="330" y="216" text-anchor="middle">生成速度の上限 ≒ メモリ帯域 ÷ 重みのサイズ</text>
+        </svg>
+        <figcaption>図1: 逐次生成では重みの読み出しが毎回発生する。演算能力ではなく、運ぶ速さが天井を決める。</figcaption>
+      </figure>
+
+      <p>
+        天井の目安は割り算で出ます。仮に重みが100GBのモデルを考えると、こうなります。
+      </p>
+
+      <pre>H100（HBM3、3.35 TB/s） : 3,350 GB/s ÷ 100 GB ≒ 33 トークン/秒
+B200（HBM3e、8 TB/s）   : 8,000 GB/s ÷ 100 GB ≒ 80 トークン/秒</pre>
+
+      <p>
+        KVキャッシュもアテンションの計算も無視した粗い上限なので、実際はこれより落ちます。
+        それでも、GPUを速い型番に載せ替えたところで数十トークン/秒のオーダーからは
+        簡単には抜けられない、という感覚はつかめると思います。750という数字が
+        いかに外れた場所にあるかも、これで見えてきます。
+      </p>
+
+      <h2>ウェハーを切らない、というCerebrasの答え</h2>
+      <p>
+        半導体は普通、直径30cmほどの円盤（ウェハー）の上に同じ回路を何百個も焼いてから、
+        1個ずつ切り出してパッケージに封入します。切り出した1個がGPUやCPUになるわけです。
+        Cerebrasがやったのは、この<strong>切り出す工程をやめる</strong>ことでした。
+        ウェハーをまるごと1枚のチップとして使ってしまう。
+      </p>
+      <p>
+        現行世代のWSE-3（Wafer Scale Engine 3）はTSMCの5nmプロセスで作られ、
+        面積は46,225平方ミリメートル、およそ21.5cm四方の正方形です。
+        NVIDIAのH100と比べると57倍の大きさで、トランジスタは4兆個、
+        AI向けコアは90万個載っています。写真で見ると、もはやチップというより
+        金属製のランチョンマットみたいな見た目をしています。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 660 250" style="--diagram-min-width: 470px" role="img" aria-labelledby="wafer-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="wafer-title">通常の半導体はウェハーを多数のダイに切り分けて個別のチップにするが、Cerebrasは切り分けずにウェハー1枚をそのまま1個のチップとして使う。</title>
+
+          <text class="label label--muted" x="150" y="32" text-anchor="middle">通常の作り方</text>
+          <circle class="node" cx="150" cy="140" r="88"/>
+          <path class="arrow" d="M80 96 L220 96"/>
+          <path class="arrow" d="M68 140 L232 140"/>
+          <path class="arrow" d="M80 184 L220 184"/>
+          <path class="arrow" d="M106 72 L106 208"/>
+          <path class="arrow" d="M150 62 L150 218"/>
+          <path class="arrow" d="M194 72 L194 208"/>
+          <text class="label label--muted" x="150" y="240" text-anchor="middle">切り出して1個ずつパッケージ化</text>
+
+          <text class="label label--muted" x="480" y="32" text-anchor="middle">Cerebras WSE-3</text>
+          <circle class="node" cx="480" cy="140" r="88"/>
+          <rect class="node node--accent" x="424" y="84" width="112" height="112" rx="6"/>
+          <text class="label" x="480" y="132" text-anchor="middle">1個のチップ</text>
+          <text class="label label--muted" x="480" y="156" text-anchor="middle">約21.5cm四方</text>
+          <text class="label label--muted" x="480" y="240" text-anchor="middle">切らずにまるごと使う</text>
+        </svg>
+        <figcaption>図2: ウェハーから最大の正方形を切り出し、それを分割せず1個のチップとして扱う。</figcaption>
+      </figure>
+
+      <p>
+        なぜそこまでするのか。狙いは面積そのものではなく、<strong>メモリをチップの上に
+        載せきる</strong>ことにあります。WSE-3は44GBのSRAMをウェハー全面に分散して持っており、
+        その帯域は毎秒21ペタバイトに達します。B200のHBMが毎秒8テラバイトなので、
+        桁を揃えると2,000倍を軽く超える差です。
+      </p>
+      <p>
+        差がここまで開くのは、SRAMがチップ外のDRAMと違って演算器のすぐ隣にあるからです。
+        GPUにもSRAMは載っていますが容量は数十MBしかなく、モデルの重みを置く場所には
+        まったく足りません。だからHBMという外部メモリに置いて、毎回運んでくることになります。
+        Cerebrasはウェハーを丸ごと使って面積を稼ぐことで、そのSRAMを44GBまで積み上げ、
+        「重みを運ぶ」という工程自体を消しにいきました。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 680 280" style="--diagram-min-width: 490px" role="img" aria-labelledby="sram-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="sram-title">GPUは小容量のSRAMと大容量のHBMを組み合わせ、重みをチップ外に置く。WSE-3は44GBのSRAMをチップ上に持ち、重みをチップの中に置いたまま計算する。</title>
+
+          <text class="label label--muted" x="170" y="30" text-anchor="middle">GPU</text>
+          <rect class="node" x="40" y="46" width="260" height="90" rx="10"/>
+          <text class="label" x="170" y="80" text-anchor="middle">チップ</text>
+          <text class="label label--muted" x="170" y="106" text-anchor="middle">SRAM 数十MB ＋ 演算器</text>
+          <rect class="node" x="40" y="164" width="260" height="80" rx="10"/>
+          <text class="label" x="170" y="196" text-anchor="middle">HBM（チップ外）</text>
+          <text class="label label--muted" x="170" y="220" text-anchor="middle">重みはここ / 最大 8 TB/s</text>
+          <text class="label label--muted" x="326" y="156" text-anchor="middle">←この線を毎回またぐ</text>
+
+          <text class="label label--muted" x="530" y="30" text-anchor="middle">Cerebras WSE-3</text>
+          <rect class="node node--accent" x="400" y="46" width="260" height="198" rx="10"/>
+          <text class="label" x="530" y="110" text-anchor="middle">ウェハー1枚＝1チップ</text>
+          <text class="label label--muted" x="530" y="140" text-anchor="middle">SRAM 44GB ＋ 90万コア</text>
+          <text class="label label--muted" x="530" y="168" text-anchor="middle">重みもここ / 21 PB/s</text>
+          <text class="label label--muted" x="530" y="204" text-anchor="middle">またぐ線がない</text>
+        </svg>
+        <figcaption>図3: 重みの置き場所が変わるだけで、ボトルネックの位置ごと動く。</figcaption>
+      </figure>
+
+      <h2>44GBに収まらないモデルはどうするのか</h2>
+      <p>
+        当然の疑問として、44GBという容量はフロンティアモデルには小さすぎます。
+        B200が1枚で192GBのHBMを積んでいることを考えると、むしろ狭いくらいです。
+        ここがウェハースケール設計のわかりやすいトレードオフで、帯域を取った代わりに
+        容量を失っています。
+      </p>
+      <p>
+        Cerebrasの対処は、モデルをレイヤーの境目で切って複数のウェハーに配る、という方法です。
+        1枚目が前半のレイヤー、2枚目が次のレイヤー群、という具合に担当を分けます。
+        重みは各ウェハーのSRAMに置きっぱなしにして動かさず、ウェハー間をやり取りするのは
+        中間結果（活性値）だけ。活性値は重みに比べればはるかに小さいので、
+        ウェハーをまたぐ通信が新しいボトルネックになりにくい、という理屈です。
+        公開されている例では、Llama 3.1の70Bクラスが4枚構成で動くとされています。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 700 200" style="--diagram-min-width: 500px" role="img" aria-labelledby="split-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="split-title">モデルをレイヤー単位で分割し複数のウェハーに配置する。各ウェハーは担当レイヤーの重みをSRAMに保持したまま動かさず、ウェハー間では小さな活性値だけが流れる。</title>
+          <defs>
+            <marker id="split-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <text class="label label--muted" x="30" y="82" text-anchor="start">入力</text>
+
+          <rect class="node node--accent" x="90"  y="50" width="140" height="76" rx="8"/>
+          <rect class="node node--accent" x="280" y="50" width="140" height="76" rx="8"/>
+          <rect class="node node--accent" x="470" y="50" width="140" height="76" rx="8"/>
+
+          <text class="label" x="160" y="80" text-anchor="middle">ウェハー1</text>
+          <text class="label label--muted" x="160" y="104" text-anchor="middle">レイヤー 1〜n</text>
+          <text class="label" x="350" y="80" text-anchor="middle">ウェハー2</text>
+          <text class="label label--muted" x="350" y="104" text-anchor="middle">レイヤー n+1〜m</text>
+          <text class="label" x="540" y="80" text-anchor="middle">ウェハー3</text>
+          <text class="label label--muted" x="540" y="104" text-anchor="middle">レイヤー m+1〜</text>
+
+          <path class="arrow" d="M230 88 L280 88" marker-end="url(#split-arrow)"/>
+          <path class="arrow" d="M420 88 L470 88" marker-end="url(#split-arrow)"/>
+          <path class="arrow" d="M610 88 L642 88" marker-end="url(#split-arrow)"/>
+          <text class="label label--muted" x="652" y="82" text-anchor="start">出力</text>
+
+          <text class="label label--muted" x="255" y="150" text-anchor="middle">活性値だけ</text>
+          <text class="label label--muted" x="445" y="150" text-anchor="middle">活性値だけ</text>
+          <text class="label label--muted" x="350" y="184" text-anchor="middle">重みは各ウェハーのSRAMに置いたまま動かさない</text>
+        </svg>
+        <figcaption>図4: 動かすものを重みから活性値に入れ替える。これが「運ばない」設計の実体。</figcaption>
+      </figure>
+
+      <h2>Ultrafastで実際に出た数字</h2>
+      <p>
+        発表された内容を整理すると、UltrafastはOpenAI APIの新しいサービスティア（提供区分）で、
+        GPT-5.6 Solを最大750出力トークン/秒、標準ティアの最大14倍の速度で動かします。
+        モデルの中身は標準ティアと同じもので、量子化などで軽くした別物ではない、
+        という点がCerebras側からもOpenAI側からも強調されています。
+      </p>
+      <p>
+        速度の効き方を示す例として挙げられているのが、Humanity's Last Exam
+        （大学院レベルの化学・経済学・文学などにまたがる2,500問のベンチマーク）の実行時間です。
+        全問を11時間あまりで走りきり、Claude Fable 5と同等の正答率に
+        7倍近く速く到達したとされています。ベンチマークの点数ではなく、
+        点数に到達するまでの時間で差を見せにきているのが今回の特徴です。
+        CerebrasのCEOであるAndrew Feldman氏は次のようにコメントしています。
+      </p>
+      <blockquote>
+        speed and intelligence are no longer mutually exclusive
+        （出典: Cerebras プレスリリース「Cerebras Powers Ultrafast Mode for OpenAI's GPT-5.6 Sol」2026年8月13日）
+      </blockquote>
+      <p>
+        提供形態は限定プレビューで、まずAPIから、申し込みフォーム経由の一部顧客に開放されます。
+        容量が増え次第アクセスを広げる、という書き方になっています。
+      </p>
+
+      <h2>気になる点</h2>
+      <p>
+        まず「最大14倍」「最大750トークン/秒」の最大がどこから来た数字なのかは、
+        現時点で開示されていません。プロンプトの長さも、推論の思考量の設定も、
+        バッチの条件も公表されていないので、自分のワークロードで何倍になるかは
+        触ってみるまでわからないと考えたほうが安全です。上限値は上限値であって、平均ではありません。
+      </p>
+      <p>
+        価格も未公表です。GPT-5.6 Solの標準ティアは100万トークンあたり入力5ドル・出力30ドルですが、
+        Ultrafastがこれにいくら上乗せされるのか、最低利用量やSLAがどうなるのかは
+        まだ何も出ていません。ウェハー1枚がそのままチップという製造コストを考えると、
+        素直に安くなる要素は思い当たりません。
+      </p>
+      <p>
+        構造的なところでは、この方式が「1ユーザーあたりの速さ」に振り切った設計であることも
+        頭に置いておきたいところです。GPUはリクエストをまとめて処理する（バッチ化する）ことで
+        1トークンあたりのコストを下げますが、まとめるほど個々のユーザーの待ち時間は延びます。
+        Cerebrasは重みを運ばない代わりに高価なシリコンを大量に占有するので、
+        速さの対価をどこで回収するのかという問いが残ります。すべての用途をこれで置き換える、
+        という種類の技術ではなさそうです。
+      </p>
+
+      <h2>モデルとハードウェアが切り離されつつある</h2>
+      <p>
+        個人的にいちばん面白いと思ったのは、性能の話よりも、OpenAIが自社モデルの一部を
+        他社の、しかもNVIDIAではないシリコンの上で提供したという事実のほうです。
+        同じモデルを、速度という軸だけ変えて別ハードで売る。モデルの賢さと、
+        それをどう届けるかが、商品として分離し始めているように見えます。
+      </p>
+      <p>
+        使う側の実感としても、生成が速いモデルは単に快適なだけでなく、
+        使い方そのものが変わります。何度も呼び直す、途中でやり直す、
+        複数の案を並列に走らせる、といった雑な使い方が現実的になるからです。
+        限定プレビューが取れて実際に触れるようになったら、そのあたりの体感を
+        あらためて書き足したいと思っています。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://openai.com/index/previewing-ultrafast/">OpenAI: Previewing Ultrafast mode: GPT-5.6 Sol at up to 14X the speed（Ultrafastの発表内容と提供条件）</a></li>
+        <li><a href="https://www.cerebras.ai/blog/accelerating-gpt-5-6-sol-ultrafast-with-openai">Cerebras Blog: Accelerating GPT-5.6 Sol Ultrafast with OpenAI（Cerebras側からの技術解説とベンチマーク）</a></li>
+        <li><a href="https://www.cerebras.ai/press-release/cerebras-announces-third-generation-wafer-scale-engine">Cerebras: Cerebras Systems Unveils World's Fastest AI Chip（WSE-3のスペック詳細）</a></li>
+        <li><a href="https://www.cerebras.ai/blog/introducing-cerebras-inference-ai-at-instant-speed">Cerebras Blog: Introducing Cerebras Inference（推論でのウェハー分割の考え方）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
