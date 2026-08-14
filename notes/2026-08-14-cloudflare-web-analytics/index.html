@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cookieを使わないアクセス解析、Cloudflare Web Analyticsを静的サイトに入れる — tech-memo</title>
+  <meta name="description" content="GitHub Pages のような静的サイトのアクセス数を測る手段として Cloudflare Web Analytics を調べた。ビーコンの仕組み、Cookie なしで訪問数を数える理屈、広告ブロッカーやサンプリングの限界までまとめる。">
+  <meta name="article:category" content="tools">
+  <meta name="article:summary" content="GitHub Pages にはアクセス解析が付いてこない。Cookie も同意バナーも要らない Cloudflare Web Analytics を、ビーコンの仕組みから訪問数の数え方、広告ブロッカーやサンプリングという弱点まで整理する。">
+  <meta name="article:tags" content="Cloudflare,アクセス解析,GitHub Pages,プライバシー,Core Web Vitals">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>Cookieを使わないアクセス解析、Cloudflare Web Analyticsを静的サイトに入れる</h1>
+      <p class="note-meta">
+        <span class="badge badge--tools">ツール</span>
+        <time datetime="2026-08-14">2026-08-14</time>
+      </p>
+
+      <p>
+        GitHub Pages でサイトを公開すると、そのうち「で、これ誰か読んでるの？」が気になってくる。
+        ところが GitHub Pages 自体にはアクセス解析の機能がない。HTML を置けば配信してくれるだけで、
+        何ページ読まれたかは教えてくれない。
+      </p>
+      <p>
+        リポジトリの Insights にある Traffic を見たことがある人もいると思う。あれは近いようで別物で、
+        直近14日ぶんしか残らず、閲覧できるのはリポジトリへの push 権限を持つ人だけ。
+        しかも数えているのは主にリポジトリページへの訪問とクローンで、公開サイト側のページ閲覧を
+        そのまま表しているわけではない。長期の傾向を追う用途には向かない。
+      </p>
+      <p>
+        そこで候補に挙がるのが Cloudflare Web Analytics。Cookie を使わず、DNS を Cloudflare に
+        向け直す必要もなく、無料で使える。このノートでは仕組みと導入手順、それから
+        「何が測れないか」を整理する。
+      </p>
+
+      <h2>何をするサービスなのか</h2>
+      <p>
+        ひとことで言うと、ページに JavaScript を1行貼ると閲覧数と表示速度を集計してくれるサービス。
+        Cloudflare の公式ドキュメントは「訪問者の個人データを収集しない」と明記していて、
+        Cookie も localStorage も使わない設計になっている。
+      </p>
+      <p>
+        Cloudflare のサービスというと DNS を移管して全トラフィックを通す構成を想像しがちだが、
+        Web Analytics はそれを前提にしていない。ドキュメントには、むしろ Cloudflare のプロキシを
+        使っていない利用者向けに設計されているという趣旨の記述がある。
+        GitHub Pages のように配信そのものは他社に任せたままでも、計測だけ借りられる。
+      </p>
+
+      <h2>ビーコンが動く流れ</h2>
+      <p>
+        計測を担うのは <code>beacon.min.js</code> という小さなスクリプト。ブラウザが記事ページを
+        読み込むと、このスクリプトが Performance API（ブラウザが持つ表示性能の計測 API）から
+        読み込み時間などを取り出し、Cloudflare 側へ送る。手動で貼った場合の送信先は
+        <code>cloudflareinsights.com/cdn-cgi/rum</code> になる。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 880 300" style="--diagram-min-width: 620px" role="img" aria-labelledby="cwa-flow-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="cwa-flow-title">Cloudflare Web Analyticsのデータの流れ。訪問者のブラウザがGitHub PagesからHTMLを取得し、HTML内のscriptタグでbeacon.min.jsを読み込む。ビーコンはPerformance APIで表示性能を計測してCloudflareの収集エンドポイントへ送信し、Cloudflareが集計してダッシュボードに表示する。</title>
+          <defs>
+            <marker id="cwa-flow-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="node" x="20" y="115" width="150" height="70" rx="8"/>
+          <text class="label" x="95" y="145" text-anchor="middle">訪問者の</text>
+          <text class="label" x="95" y="165" text-anchor="middle">ブラウザ</text>
+
+          <rect class="node" x="300" y="20" width="200" height="60" rx="8"/>
+          <text class="label" x="400" y="45" text-anchor="middle">GitHub Pages</text>
+          <text class="label label--muted" x="400" y="65" text-anchor="middle">HTMLを配信</text>
+
+          <rect class="node node--accent" x="300" y="115" width="200" height="70" rx="8"/>
+          <text class="label" x="400" y="143" text-anchor="middle">beacon.min.js</text>
+          <text class="label label--muted" x="400" y="163" text-anchor="middle">Performance APIで計測</text>
+
+          <rect class="node" x="650" y="115" width="210" height="70" rx="8"/>
+          <text class="label" x="755" y="143" text-anchor="middle">Cloudflare</text>
+          <text class="label label--muted" x="755" y="163" text-anchor="middle">/cdn-cgi/rum で受信</text>
+
+          <rect class="node" x="650" y="230" width="210" height="55" rx="8"/>
+          <text class="label" x="755" y="263" text-anchor="middle">ダッシュボード</text>
+
+          <path class="arrow" d="M170 135 L235 135 L235 50 L300 50" marker-end="url(#cwa-flow-arrow)"/>
+          <text class="label label--muted" x="245" y="100" text-anchor="start">①HTMLを取得</text>
+
+          <path class="arrow" d="M170 165 L300 165" marker-end="url(#cwa-flow-arrow)"/>
+          <text class="label label--muted" x="235" y="200" text-anchor="middle">②scriptを読み込む</text>
+
+          <path class="arrow" d="M500 150 L650 150" marker-end="url(#cwa-flow-arrow)"/>
+          <text class="label label--muted" x="575" y="140" text-anchor="middle">③計測結果を送信</text>
+
+          <path class="arrow" d="M755 185 L755 230" marker-end="url(#cwa-flow-arrow)"/>
+          <text class="label label--muted" x="770" y="212" text-anchor="start">④集計</text>
+        </svg>
+        <figcaption>
+          図1: 配信は GitHub Pages のまま、計測だけ Cloudflare に送る構成。
+          DNS の変更もプロキシ設定も要らない。
+        </figcaption>
+      </figure>
+
+      <p>
+        ここで押さえておきたいのは、計測がブラウザ側の JavaScript で完結している点。
+        サーバーのアクセスログを解析する方式ではないので、JavaScript が動かない環境の閲覧は
+        そもそも数に入らない。後述する広告ブロッカーの話もここから来ている。
+      </p>
+
+      <h2>Cookieなしでどうやって訪問数を数えるのか</h2>
+      <p>
+        一番おもしろいのがこの部分だと思う。普通のアクセス解析は Cookie に ID を書き込んで
+        「同じ人が戻ってきた」を判定する。Cloudflare はそれをやらない。
+        発表時のブログでも、Cookie や localStorage といったクライアント側の状態を使わない、
+        IP アドレスや User-Agent で追跡するのはもっと侵襲的だ、という立場を取っている。
+      </p>
+      <p>
+        では訪問数（visits）はどう出しているのか。ドキュメントの定義はこうなっている。
+      </p>
+      <blockquote>
+        A page view that originated from a different website or direct link.
+        （Cloudflare Docs, High-level metrics）
+      </blockquote>
+      <p>
+        つまり HTTP リファラ（どのページから来たかを示すヘッダ）が自分のホスト名と一致しない
+        ページ閲覧を1訪問として数えている。サイト内のリンクをたどった2ページ目以降は
+        リファラが自ホストになるので、閲覧数だけ増えて訪問数は増えない。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 700 230" style="--diagram-min-width: 480px" role="img" aria-labelledby="cwa-visit-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="cwa-visit-title">訪問数の数え方。検索やSNSなど外部から記事Aに来た場合はリファラが別ホストなので訪問数と閲覧数が両方1増える。サイト内リンクで記事Aから記事Bへ移った場合はリファラが自ホストなので閲覧数だけが1増える。</title>
+          <defs>
+            <marker id="cwa-visit-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="node" x="20" y="30" width="170" height="56" rx="8"/>
+          <text class="label" x="105" y="63" text-anchor="middle">検索・SNS・直接</text>
+          <path class="arrow" d="M190 58 L285 58" marker-end="url(#cwa-visit-arrow)"/>
+          <text class="label label--muted" x="237" y="26" text-anchor="middle">別ホスト</text>
+          <rect class="node node--accent" x="285" y="30" width="145" height="56" rx="8"/>
+          <text class="label" x="357" y="63" text-anchor="middle">記事A</text>
+          <text class="label" x="460" y="52" text-anchor="start">訪問数 +1</text>
+          <text class="label" x="460" y="76" text-anchor="start">閲覧数 +1</text>
+
+          <rect class="node" x="20" y="145" width="170" height="56" rx="8"/>
+          <text class="label" x="105" y="178" text-anchor="middle">記事A</text>
+          <path class="arrow" d="M190 173 L285 173" marker-end="url(#cwa-visit-arrow)"/>
+          <text class="label label--muted" x="237" y="141" text-anchor="middle">自ホスト</text>
+          <rect class="node" x="285" y="145" width="145" height="56" rx="8"/>
+          <text class="label" x="357" y="178" text-anchor="middle">記事B</text>
+          <text class="label label--muted" x="460" y="167" text-anchor="start">訪問数 +0</text>
+          <text class="label" x="460" y="191" text-anchor="start">閲覧数 +1</text>
+        </svg>
+        <figcaption>
+          図2: リファラが自ホストかどうかだけで訪問を判定する。
+          個人を識別しない代わりに、同じ人が翌日また来ても別の訪問として数えられる。
+        </figcaption>
+      </figure>
+
+      <p>
+        この割り切りの代償として、いわゆるユニークユーザー数は出ない。
+        同じ人が3日連続で検索から来れば3訪問。逆に言えば「誰が」を保存していないからこそ
+        Cookie 同意バナーの話にならずに済んでいる、という設計上のトレードオフになっている。
+      </p>
+      <p>
+        なお閲覧数（page views）の定義は「content-type が HTML の成功した HTTP レスポンス」。
+        画像や CSS の取得はカウントされない。
+      </p>
+
+      <h2>GitHub Pagesへの入れ方</h2>
+      <p>
+        手順自体は拍子抜けするほど短い。Cloudflare ダッシュボードの Web Analytics を開き、
+        Add a site から計測したいホスト名（<code>ユーザー名.github.io</code> や独自ドメイン）を
+        登録する。すると Manage site にスニペットが出てくるので、それを HTML の
+        <code>&lt;/body&gt;</code> の直前に貼る。形はこうなる。
+      </p>
+
+      <pre><code class="language-html">&lt;!-- Cloudflare Web Analytics --&gt;
+&lt;script defer src="https://static.cloudflareinsights.com/beacon.min.js"
+        data-cf-beacon='{"token": "YOUR_TOKEN"}'&gt;&lt;/script&gt;
+&lt;!-- End Cloudflare Web Analytics --&gt;
+</code></pre>
+
+      <p>
+        <code>YOUR_TOKEN</code> の部分にはダッシュボードが発行した文字列が入る。
+        これは公開ページの HTML に載る前提の値なので秘密鍵の類ではないものの、
+        別サイトのトークンを流用すると集計先が混ざるので、サイトごとに発行したものを使う。
+      </p>
+      <p>
+        注意したいのは、貼る作業がページ単位だということ。このサイトのようにビルドツールを
+        使わず素の HTML を並べている構成だと、記事を1本増やすたびにスニペットの貼り忘れが起きうる。
+        テンプレート（<code>notes/template/index.html</code>）側に先に入れておくのが現実的だと思う。
+        Jekyll を使っているなら <code>_layouts</code> や <code>_includes</code> の共通レイアウトに
+        1回書けば済む。
+      </p>
+      <p>
+        ページ遷移で HTML を読み直さない SPA には別の入れ方が用意されていて、
+        <code>data-cf-beacon</code> に <code>spa</code> の設定を渡すとルート変更も拾ってくれる。
+        素の静的サイトなら気にしなくていい。
+      </p>
+
+      <h2>ダッシュボードで見られるもの</h2>
+      <p>
+        訪問数と閲覧数に加えて、ページ別・リファラ別・国別・ブラウザ別といった内訳が並ぶ。
+        アクセス解析としては標準的な顔ぶれで、目新しさはない。
+      </p>
+      <p>
+        個人的におまけとして嬉しいのは表示速度のほう。Core Web Vitals として
+        LCP（主要コンテンツが表示されるまでの時間）、INP（クリックなどの操作に反応する速さ）、
+        CLS（読み込み中にレイアウトがずれる度合い）が、実際の訪問者のブラウザで計測した値として
+        Good / Needs Improvement / Poor の判定つきで出る。Lighthouse が自分の手元1台で測るのに対し、
+        こちらは本当の閲覧環境の分布が見える。
+      </p>
+
+      <h2>期待しすぎないほうがいいところ</h2>
+      <p>
+        便利なぶん、数字の性質は理解して使いたい。導入前に知っておきたい点を挙げる。
+      </p>
+      <ul>
+        <li>広告ブロッカーに止められる。FAQ 自身が adblockplus、Brave、DuckDuckGo の
+          拡張機能でビーコンがブロックされると認めている。技術系の記事は読者にブロッカー利用者が
+          多いので、実際の閲覧より少なめの数字が出ると考えておく。</li>
+        <li>古いデータは薄まる。取り込み時点ではサンプリングしないが、7日を過ぎたぶんは
+          約10%に集計され、参照できるのは過去6か月ぶんとされている。
+          先月の数字と今週の数字は同じ解像度ではない。</li>
+        <li>無料プランではルールが0件。プロキシ配下のサイトで計測対象を絞り込むルール機能は
+          Pro 以上の機能で、Free は使えない。またプロキシを通していないサイトの登録は10件まで。</li>
+      </ul>
+      <p>
+        ブロッカーの影響を受けない計測が欲しいなら、リクエストそのものを数えるサーバーサイドの
+        方法（Cloudflare のエッジ解析や、配信元のアクセスログ）を選ぶことになる。
+        ただし GitHub Pages はアクセスログを利用者に見せてくれないので、その道は最初から塞がっている。
+      </p>
+
+      <h2>他の選択肢と比べてどうか</h2>
+      <p>
+        同じ枠には GA4、Plausible、GoatCounter あたりが並ぶ。GA4 は取れる情報が桁違いに多い代わり、
+        Cookie を使うのでプライバシーポリシーや同意まわりの検討が付いてくるし、
+        個人の技術ノートに対しては明らかに過剰。Plausible や GoatCounter は
+        プライバシー重視の軽量解析という点で性格が近く、GoatCounter は個人サイト向けの無料枠がある。
+      </p>
+      <p>
+        Cloudflare Web Analytics を選ぶ理由があるとすれば、無料で、貼るのが1行で、
+        同意バナーを考えずに済んで、ついでに実ユーザーの Core Web Vitals まで見える、という
+        手間に対する見返りの良さだと思う。逆に、読者ひとりひとりの回遊を追いたいとか、
+        ブロッカー込みで正確な実数が欲しいといった要求には応えられない。
+        「だいたい何人くらいに読まれていて、どの記事が伸びているか」を知りたいだけなら十分で、
+        個人の技術ノートの用途はたいていそこに収まるはず。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://developers.cloudflare.com/web-analytics/about/">Cloudflare Docs: Cloudflare Web Analytics（概要）</a></li>
+        <li><a href="https://developers.cloudflare.com/web-analytics/get-started/">Cloudflare Docs: Get started（手動セットアップの手順）</a></li>
+        <li><a href="https://developers.cloudflare.com/web-analytics/data-metrics/high-level-metrics/">Cloudflare Docs: High-level metrics（訪問数・閲覧数の定義）</a></li>
+        <li><a href="https://developers.cloudflare.com/web-analytics/faq/">Cloudflare Docs: FAQs（サンプリング・広告ブロッカー・データ保持）</a></li>
+        <li><a href="https://developers.cloudflare.com/web-analytics/limits/">Cloudflare Docs: Limits（サイト数・ルール数の上限）</a></li>
+        <li><a href="https://developers.cloudflare.com/web-analytics/get-started/web-analytics-spa/">Cloudflare Docs: Web Analytics for SPAs</a></li>
+        <li><a href="https://blog.cloudflare.com/privacy-first-web-analytics/">Cloudflare Blog: Free, Privacy-First Analytics for a Better Web（設計思想）</a></li>
+        <li><a href="https://docs.github.com/en/repositories/viewing-activity-and-data-for-your-repository/viewing-traffic-to-a-repository">GitHub Docs: Viewing traffic to a repository（Insights の Traffic）</a></li>
+        <li><a href="https://www.goatcounter.com/">GoatCounter（プライバシー重視の代替サービス）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
