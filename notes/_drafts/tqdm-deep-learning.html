@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>tqdmで深層学習の学習ループを可視化する — tech-memo</title>
+  <meta name="description" content="深層学習の学習ループにPythonのtqdmを組み込み、進捗表示・loss監視・ネストしたバー・CIでのログ肥大化対策までを、実際に動かして確認しながら解説する技術ノート。">
+  <meta name="article:category" content="tools">
+  <meta name="article:summary" content="GPUが黙って回り続ける学習ループの不安を、tqdmのプログレスバーで解消する。基本の使い方からloss監視、ネストしたバー、CIでのログ肥大化対策まで実際に動かして確かめた内容を整理する。">
+  <meta name="article:tags" content="tqdm,深層学習,PyTorch,Python,進捗バー">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>tqdmで深層学習の学習ループを可視化する</h1>
+      <p class="note-meta">
+        <span class="badge badge--tools">ツール</span>
+        <time datetime="2026-08-15">2026-08-15</time>
+      </p>
+
+      <p>
+        学習を回している間、ターミナルが何十分も黙り込むことがあります。GPUのファンだけが
+        うなっていて、ログは一行も流れてきません。フリーズしているのか、順調に進んでいるのか、
+        そもそも合っているループを回しているのかすら、画面を眺めているだけでは判断がつかない。
+        そんな経験に心当たりのある方は多いのではないでしょうか。
+      </p>
+      <p>
+        この「今どこにいるか分からない」不安を消してくれるのが、Pythonの進捗バーライブラリ
+        <strong>tqdm</strong>です。名前はアラビア語で「進歩」を意味するtaqaddumに由来し、
+        スペイン語のte quiero demasiado（あなたをとても愛してる）の略でもあるという、
+        公式サイトいわく洒落の効いた由来を持っています。深層学習の文脈では、エポックや
+        ミニバッチのループにひとかぶせするだけでETA（残り時間の見積もり）が出る手軽さから、
+        ほぼ標準装備のように使われています。このノートでは基本の使い方から学習ループへの
+        組み込み方、ハマりやすい落とし穴まで、実際に動かして確認しながら整理します。
+      </p>
+
+      <blockquote>
+        A Fast, Extensible Progress Bar for Python and CLI（tqdm公式リポジトリの説明より）
+      </blockquote>
+
+      <h2>基本はイテラブルを包むだけ</h2>
+      <p>
+        インストールはpipで一発です。
+      </p>
+      <pre><code>pip install tqdm</code></pre>
+      <p>
+        使い方も単純で、既存のfor文が回すイテラブルをtqdm()で包むだけです。
+      </p>
+      <pre><code>from tqdm import tqdm
+import time
+
+for i in tqdm(range(10000)):
+    time.sleep(0.001)  # ここに学習の1ステップが入る
+</code></pre>
+      <p>
+        range(N)をtqdmで包む組み合わせはよく使うので、<code>trange(N)</code>という
+        短縮形も用意されています。実行すると、次のような1行がターミナルに表示されます
+        （この記事のために実際に動かして確認したものです）。
+      </p>
+      <pre><code>train:  45%|##############8                  | 450/1000 [00:12&lt;00:15, 36.29it/s]</code></pre>
+      <p>
+        この1行に、進捗率・経過時間・残り時間の見積もり・処理速度という、学習を見守るうえで
+        欲しい情報がほぼ詰め込まれています。手動で<code>print(f"{i}/{total}")</code>を
+        書いていた頃を思うと、拍子抜けするくらい省エネです。表示される文字はターミナル次第で
+        変わり、Unicode対応の端末では塗りつぶしブロックで描かれますが、非対話環境
+        （このノートの検証環境や、後述するCIのログなど）ではasciiの#にフォールバックします。
+        見た目が違っても中身の情報は同じなので、慌てる必要はありません。
+      </p>
+
+      <h2>バー1行が伝えている情報</h2>
+      <p>
+        先ほどの1行を分解すると、次の5つのパーツに分かれます。
+      </p>
+      <figure class="diagram">
+        <svg viewBox="0 0 760 170" style="--diagram-min-width: 540px" role="img" aria-labelledby="tqdm-anatomy-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="tqdm-anatomy-title">tqdmが1行に表示する情報。左から順に、説明文、進捗率とバー、処理済み件数、経過時間と残り時間の見積もり、処理速度が並ぶ。</title>
+          <defs>
+            <marker id="tqdm-anatomy-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <rect class="node" x="10"  y="40" width="130" height="60" rx="8"/>
+          <rect class="node node--accent" x="160" y="40" width="130" height="60" rx="8"/>
+          <rect class="node" x="310" y="40" width="130" height="60" rx="8"/>
+          <rect class="node" x="460" y="40" width="140" height="60" rx="8"/>
+          <rect class="node" x="620" y="40" width="130" height="60" rx="8"/>
+          <text class="label" x="75"  y="66" text-anchor="middle">desc</text>
+          <text class="label label--muted" x="75" y="86" text-anchor="middle">見出し文字列</text>
+          <text class="label" x="225" y="66" text-anchor="middle">% + bar</text>
+          <text class="label label--muted" x="225" y="86" text-anchor="middle">進み具合</text>
+          <text class="label" x="375" y="66" text-anchor="middle">n/total</text>
+          <text class="label label--muted" x="375" y="86" text-anchor="middle">処理済み件数</text>
+          <text class="label" x="530" y="66" text-anchor="middle">経過&lt;残り</text>
+          <text class="label label--muted" x="530" y="86" text-anchor="middle">経過時間とETA</text>
+          <text class="label" x="685" y="66" text-anchor="middle">it/s</text>
+          <text class="label label--muted" x="685" y="86" text-anchor="middle">処理速度</text>
+          <path class="arrow" d="M140 70 L160 70" marker-end="url(#tqdm-anatomy-arrow)"/>
+          <path class="arrow" d="M290 70 L310 70" marker-end="url(#tqdm-anatomy-arrow)"/>
+          <path class="arrow" d="M440 70 L460 70" marker-end="url(#tqdm-anatomy-arrow)"/>
+          <path class="arrow" d="M600 70 L620 70" marker-end="url(#tqdm-anatomy-arrow)"/>
+        </svg>
+        <figcaption>図1: バー1行が伝えている5つの情報。実行中はこの並びで左から更新されていきます。</figcaption>
+      </figure>
+
+      <h2>学習ループへの組み込み方</h2>
+      <p>
+        深層学習の学習ループでtqdmが力を発揮するのは、PyTorchのDataLoader
+        （学習データを一定件数ずつまとめて取り出す仕組み）をそのまま包んで、バッチごとに
+        lossやaccuracyをバーの右端に流し込めるところです。<code>set_postfix()</code>に
+        辞書やキーワード引数を渡すと、バーを崩さずに末尾へ追記してくれます。
+      </p>
+      <pre><code>from tqdm import tqdm
+
+running_loss = 0.0
+pbar = tqdm(train_loader, desc=f"epoch {epoch}")
+for step, (x, y) in enumerate(pbar, start=1):
+    optimizer.zero_grad()
+    out = model(x)
+    loss = criterion(out, y)
+    loss.backward()
+    optimizer.step()
+
+    running_loss += loss.item()
+    pbar.set_postfix(loss=f"{running_loss / step:.3f}")
+</code></pre>
+      <p>
+        train_loaderがPyTorchのDataLoaderであっても、ただのリストであっても、tqdmから
+        見れば「長さの分かるイテラブル」でしかありません。だからこの書き方はフレームワークを
+        問わず使い回せます。なおtqdm側の挙動（set_postfixの表示や更新タイミングなど）は
+        この記事のためにダミーデータで実際に動かして確認済みです。modelやoptimizerの部分は
+        PyTorchの学習ループとしてよく見る定型的な書き方に沿っています。
+      </p>
+
+      <h2>エポックとバッチを二重に見せる</h2>
+      <p>
+        エポックの外ループとバッチの内ループを両方バーにしたいときは、<code>position</code>
+        引数で表示行を分けます。内側のバーは1エポックごとに作り直すので、
+        <code>leave=False</code>を付けて役目を終えたら消してやるのがコツです。付け忘れると、
+        エポックを重ねるたびに使い終わったバーが画面にずらずら積み上がっていきます
+        （実際にやってみて、スクロールが止まらなくなって気づきました）。
+      </p>
+      <pre><code>from tqdm import tqdm, trange
+
+for epoch in trange(EPOCHS, desc="epoch"):
+    running_loss = 0.0
+    pbar = tqdm(train_loader, desc=f"  train[{epoch}]", leave=False)
+    for step, (x, y) in enumerate(pbar, start=1):
+        loss = train_step(x, y)  # 前節と同じ学習処理（forward/backward/step）をまとめた想定
+        running_loss += loss.item()
+        pbar.set_postfix(loss=f"{running_loss / step:.3f}")
+</code></pre>
+      <figure class="diagram">
+        <svg viewBox="0 0 640 190" style="--diagram-min-width: 460px" role="img" aria-labelledby="tqdm-nest-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="tqdm-nest-title">エポックの外ループとバッチの内ループを別の行に表示する仕組み。外側はposition=0で常に残り、内側はposition=1でleave=Falseにより毎エポック消えて作り直される。</title>
+          <defs>
+            <marker id="tqdm-nest-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <rect class="node node--accent" x="40" y="20" width="560" height="56" rx="8"/>
+          <rect class="node" x="90" y="118" width="460" height="56" rx="8"/>
+          <text class="label" x="320" y="54" text-anchor="middle">epochループ（外側・position=0）</text>
+          <text class="label" x="320" y="152" text-anchor="middle">batchループ（内側・leave=False）</text>
+          <path class="arrow" d="M320 76 L320 118" marker-end="url(#tqdm-nest-arrow)"/>
+          <text class="label label--muted" x="440" y="102" text-anchor="middle">エポックごとに作り直す</text>
+        </svg>
+        <figcaption>図2: position引数で外側と内側のバーを別の行に固定します。leave=Falseの内側バーは毎エポック消え、また作られます。</figcaption>
+      </figure>
+
+      <h2>printを挟むとバーが崩れる</h2>
+      <p>
+        学習ループの途中でチェックポイントの保存やログ出力のために<code>print()</code>を
+        呼ぶと、バーの描画が乱れて画面が崩れます。tqdmはカーソルを同じ行に戻して上書きする
+        前提で動いているため、そこに割り込んでprintされると行がずれてしまうからです。代わりに
+        <code>tqdm.write()</code>を使うと、バーを一瞬どけてメッセージを流し、また同じ場所に
+        バーを復元してくれます。
+      </p>
+      <pre><code>from tqdm import tqdm
+
+for i in tqdm(range(steps)):
+    if i == checkpoint_step:
+        tqdm.write(f"checkpoint saved at step {i}")
+</code></pre>
+      <p>
+        loggingモジュールを使っている場合も注意が必要です。StreamHandlerがそのまま
+        printしてしまうとバーを壊すので、<code>tqdm.write()</code>をハンドラ経由で呼ぶか、
+        学習中だけログレベルを絞るといった工夫が要ります。
+      </p>
+
+      <h2>CIやログファイルに流すと様子が変わる</h2>
+      <p>
+        ここが個人的に一番ハマったところです。ターミナルで動かしている分には快適なtqdmも、
+        標準出力をファイルにリダイレクトしたりCIのログに流したりすると様子が一変します。
+        tqdmはバーを更新するたびに行の先頭へカーソルを戻す制御文字（キャリッジリターン）を
+        送っているだけなので、実際のターミナルなら上書きされて1行に見えても、ただの
+        テキストファイルにはその制御文字ごとそのまま溜まっていきます。試しに30ステップの
+        ループをファイルへリダイレクトしてみると、こうなりました。
+      </p>
+      <pre><code>$ python train.py &gt; train.log 2&gt;&amp;1
+$ wc -c train.log
+376 train.log</code></pre>
+      <p>
+        30ステップしか回していないのに、9回分のバーの状態がキャリッジリターンで区切られた
+        まま1つのファイルにぶら下がっています。ログビューアによってはこれが読みにくい塊として
+        表示されます。対策は主に2つで、更新頻度そのものを下げる<code>mininterval</code>と、
+        TTYでないときはバーごと出さない<code>disable</code>です。
+      </p>
+      <pre><code>import sys
+from tqdm import tqdm
+
+for i in tqdm(range(steps), disable=not sys.stdout.isatty()):
+    pass  # ここに学習の1ステップが入る
+</code></pre>
+      <p>
+        <code>sys.stdout.isatty()</code>は、出力先が人間の見ている端末かどうかを教えて
+        くれます。手元のターミナルではTrueになってバーが出ますが、CIやリダイレクト先では
+        Falseになるのでdisableが効き、バーそのものが消えてログはprint()相当のシンプルな
+        行だけになります。実際に上のコードでリダイレクトを試すと、出力ファイルの中身は
+        最終行だけの数バイトになりました。
+      </p>
+
+      <h2>JupyterやColabではimportを変える</h2>
+      <p>
+        ノートブック環境でtqdm.tqdmをそのまま使うと、セルの中に文字列のバーが再描画され
+        続けて見づらくなります。<code>tqdm.notebook</code>を使うと、ipywidgetsベースの
+        本物のプログレスバーウィジェットに切り替わります。
+      </p>
+      <pre><code>from tqdm.notebook import tqdm, trange</code></pre>
+      <p>
+        スクリプトとノートブックの両方で同じコードを使い回したいなら、<code>tqdm.auto</code>
+        が環境を見て適切な実装を選んでくれます。
+      </p>
+      <pre><code>from tqdm.auto import tqdm</code></pre>
+      <p>
+        迷ったらとりあえずtqdm.autoにしておく、くらいの感覚で十分です。
+      </p>
+
+      <h2>複数GPUでは1プロセスだけに絞る</h2>
+      <p>
+        DistributedDataParallel（DDP）などでプロセスを複数並べて学習する場合、全プロセスが
+        それぞれtqdmを表示すると、同じ内容のバーがプロセス数だけ重なって流れてきます。
+        GPU4枚なら4本、8枚なら8本です。よくあるのは、rank（プロセスの通し番号）が0の
+        プロセスだけでバーを出し、他のプロセスは<code>disable=True</code>にしてしまう
+        書き方です。
+      </p>
+      <pre><code># 擬似コード（イメージ）。実際のrank取得はフレームワークの流儀に従う
+pbar = tqdm(train_loader, disable=(rank != 0))
+</code></pre>
+      <p>
+        rankの取り方は分散学習フレームワークによって変わるので、上のコードはあくまで
+        イメージです。実際に組むときは使っているフレームワークの流儀に合わせてください。
+      </p>
+
+      <h2>最初に覚えておけば十分なこと</h2>
+      <p>
+        機能はいろいろ挙げましたが、日常的に使うのはごく一部です。for文をtqdm()で包むこと、
+        set_postfix()でlossを流すこと、printの代わりにtqdm.write()を使うこと。この3つを
+        押さえておけば、たいていの学習ループは困りません。CIのログが荒れて気になったときに
+        disableとmininterval、ノートブックで見づらいと感じたときにtqdm.autoを思い出せれば、
+        それで十分です。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://github.com/tqdm/tqdm">tqdm（GitHub公式リポジトリ、READMEに全オプションの一覧がある）</a></li>
+        <li><a href="https://tqdm.github.io/">tqdm公式ドキュメントサイト</a></li>
+        <li><a href="https://pypi.org/project/tqdm/">tqdm（PyPI）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
