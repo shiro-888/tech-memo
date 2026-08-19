@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Anthropic公式記事に見るAIエージェント構築のベストプラクティス — tech-memo</title>
+  <meta name="description" content="Anthropicのエンジニアリングブログが公開してきたAIエージェント構築のベストプラクティスを、設計思想からマルチエージェント、ツール設計、評価、MCPまでテーマ別に整理した参照用の技術ノート。">
+  <meta name="article:category" content="ai">
+  <meta name="article:summary" content="Anthropicが公式に公開しているAIエージェント構築のベストプラクティス記事群を、設計思想・構成要素・実行基盤・評価・MCPというテーマ別に整理し、要点とリンクをまとめた参照用ノート。">
+  <meta name="article:tags" content="Anthropic,Claude,AIエージェント,MCP,ベストプラクティス">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>Anthropic公式記事に見るAIエージェント構築のベストプラクティス</h1>
+      <p class="note-meta">
+        <span class="badge badge--ai">AI</span>
+        <time datetime="2026-08-19">2026-08-19</time>
+      </p>
+
+      <p>
+        「AIエージェントの作り方」を指南する記事は、もはや数えきれないほどあります。ただ、そのほとんどは
+        又聞きの二次情報で、辿っていくと結局は同じ元ネタに行き着くことが少なくありません。実はその元ネタの
+        多くは、Claudeを作っているAnthropic自身が、自社のエンジニアリングブログで丁寧に書いています。
+        マルチエージェントの研究システムをどう設計したか、ツールの説明文ひとつでどれだけ精度が変わったか、
+        長時間動き続けるエージェントが何を忘れて何を壊すか。どれも実際に手を動かした上での報告で、
+        読み応えがあります。
+      </p>
+      <p>
+        このノートは、そうしたAnthropic公式のエージェント関連記事を一度に見渡せるよう、テーマ別に整理し
+        直したものです。あくまで見取り図と要点であり、原典の厳密な要約ではありません。気になった項目が
+        あれば、リンク先の本文を直接読むことを前提にしています。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 750 480" style="--diagram-min-width: 520px" role="img" aria-labelledby="roadmap-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="roadmap-title">Anthropic公式記事の見取り図。設計思想、構成要素、実行基盤、評価という4段階の流れを軸に、マルチエージェント設計を横の分岐として、MCPを全体の土台として配置している。</title>
+          <defs>
+            <marker id="roadmap-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <rect class="node" x="210" y="20"  width="300" height="64" rx="8"/>
+          <rect class="node" x="210" y="114" width="300" height="64" rx="8"/>
+          <rect class="node" x="210" y="208" width="300" height="64" rx="8"/>
+          <rect class="node" x="210" y="302" width="300" height="64" rx="8"/>
+          <rect class="node" x="560" y="20"  width="170" height="64" rx="8"/>
+          <rect class="node node--accent" x="20" y="396" width="700" height="64" rx="8"/>
+
+          <text class="label" x="360" y="46"  text-anchor="middle">設計思想</text>
+          <text class="label label--muted" x="360" y="66" text-anchor="middle">エージェントの基本的な考え方</text>
+
+          <text class="label" x="360" y="140" text-anchor="middle">構成要素</text>
+          <text class="label label--muted" x="360" y="160" text-anchor="middle">ツール・コンテキスト・Skills</text>
+
+          <text class="label" x="360" y="234" text-anchor="middle">実行基盤</text>
+          <text class="label label--muted" x="360" y="254" text-anchor="middle">Agent SDK・Harness・Managed Agents</text>
+
+          <text class="label" x="360" y="328" text-anchor="middle">評価</text>
+          <text class="label label--muted" x="360" y="348" text-anchor="middle">うまく動いているかを測る</text>
+
+          <text class="label" x="645" y="58" text-anchor="middle">マルチエージェント</text>
+
+          <text class="label" x="370" y="422" text-anchor="middle">MCP</text>
+          <text class="label label--muted" x="370" y="442" text-anchor="middle">エージェントとツールをつなぐ相互運用の標準（土台）</text>
+
+          <path class="arrow" d="M360 84 L360 114" marker-end="url(#roadmap-arrow)"/>
+          <path class="arrow" d="M360 178 L360 208" marker-end="url(#roadmap-arrow)"/>
+          <path class="arrow" d="M360 272 L360 302" marker-end="url(#roadmap-arrow)"/>
+          <path class="arrow" d="M510 52 L560 52" marker-end="url(#roadmap-arrow)"/>
+        </svg>
+        <figcaption>図1: この記事で紹介する記事群の見取り図。設計思想から実行基盤、評価までを縦の流れとして読みつつ、複数エージェントへの分担は横の分岐、MCPは全体を支える土台として位置づけている。</figcaption>
+      </figure>
+
+      <h2>出発点になる2本、エージェントとは何か</h2>
+      <p>
+        最初に読むべきは、この2本です。ここで語られている前提を共有していないと、以降のどの記事も
+        文脈がつかみにくくなります。
+      </p>
+      <p>
+        <a href="https://www.anthropic.com/engineering/building-effective-agents">Building Effective AI Agents</a>
+        （2024年12月公開）は、シリーズの起点にあたる記事です。<strong>ワークフロー</strong>
+        （LLMとツールを事前に決めたコードパスで動かす仕組み）と<strong>エージェント</strong>
+        （LLM自身がプロセスとツール利用を動的に決める仕組み）をまず区別し、プロンプトチェイニング・
+        ルーティング・並列化・オーケストレーター/ワーカー・評価者/最適化者という5つの定番パターンを
+        紹介します。核心にあるのは、複雑さは測定可能な改善が伴うときだけ足すという一貫した姿勢で、
+        いきなりフレームワークに頼るのではなく、まずシンプルな組み合わせで十分かを疑うことを勧めています。
+      </p>
+      <p>
+        <a href="https://code.claude.com/docs/en/best-practices">Best practices for Claude Code</a>は、
+        その考え方をコーディングエージェントの実践に落とし込んだガイドです。Claudeに検証手段
+        （テスト・ビルド・スクリーンショットとの比較など）を与えて自走させること、実装前にplanモードで
+        探索と計画を分離すること、CLAUDE.mdには書かないとClaudeが間違えることだけを書くこと、
+        サブエージェントで調査をメインの文脈から切り離すことなど、コンテキストウィンドウの逼迫を前提に
+        した具体的な工夫が並びます。もともとは<code>anthropic.com/engineering/claude-code-best-practices</code>
+        という記事でしたが、現在はClaude Codeの公式ドキュメントへ統合されています。
+      </p>
+
+      <h2>複数のエージェントに分担させる</h2>
+      <p>
+        1体のエージェントで足りない場面には、複数体制という選択肢があります。
+        <a href="https://www.anthropic.com/engineering/multi-agent-research-system">How we built our multi-agent research system</a>
+        （2025年6月公開）は、Anthropicの「Research」機能を支えるマルチエージェント構成の裏側をまとめた
+        記事です。Opus 4をリードエージェント、Sonnet 4を並列サブエージェントに据えたオーケストレーター/
+        ワーカー構成で、社内の評価では単一のOpus 4を90.2%上回ったと報告されています。
+      </p>
+      <p>
+        一方で代償も率直に書かれています。通常のチャットに比べてエージェントは約4倍、マルチエージェント
+        構成は約15倍のトークンを消費するため、高価値なタスクにしか経済的に見合いません。単純な質問に
+        50体ものサブエージェントを生成してしまう暴走、毎回異なる判断を下す非決定性ゆえのデバッグの難しさ、
+        長時間動かすためのチェックポイントや段階的デプロイの必要性など、マルチエージェントならではの
+        運用課題が具体的な数字つきで語られているのが読みどころです。
+      </p>
+
+      <h2>エージェントを支える3つの材料</h2>
+      <p>
+        エージェント自体の設計方針が決まったら、次は中身です。Anthropicはツール・コンテキスト・スキルと
+        いう3つの構成要素それぞれに、単独の記事を割いています。
+      </p>
+      <p>
+        <a href="https://www.anthropic.com/engineering/writing-tools-for-agents">Writing effective tools for AI agents, using AI agents</a>
+        （2025年9月公開）は、エージェント向けのツール設計が従来のAPI設計と何が違うかを整理しています。
+        既存APIをそのまま薄くラップするのではなく、エージェントのコンテキスト消費量を意識した粒度にする
+        こと（連絡先の全件返却ではなくsearch_contactsのような検索型ツールにする、など）、サービスごとに
+        名前空間を切ること、エラーメッセージは次に取るべき行動を示唆する文にすることなどが挙げられて
+        います。さらに踏み込んで、Claude自身にツールの評価結果を分析させ、説明文や設計を改善させるという
+        手法も紹介されており、記事タイトルの「using AI agents」はこの部分を指しています。
+      </p>
+      <p>
+        <a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Effective context engineering for AI agents</a>
+        （2025年9月公開）は、単発のプロンプトを書く「プロンプトエンジニアリング」と、複数ターンにわたって
+        蓄積される情報を選別し続ける「コンテキストエンジニアリング」を切り分けた上で、後者の勘所を解説して
+        います。長時間タスクでコンテキストが埋まってきたときの対処として、要約して圧縮するcompaction、
+        コンテキスト外の永続メモリにメモを取るstructured note-taking、専門特化したサブエージェントに
+        探索させて要約だけ持ち帰らせるsub-agent構成の3つを、タスクの性質に応じて使い分けるよう勧めて
+        います。
+      </p>
+      <p>
+        <a href="https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills">Equipping agents for the real world with Agent Skills</a>
+        （2025年10月公開）は、Claudeが動的に見つけて読み込める「フォルダ形式の手順書」であるAgent Skills
+        の仕組みを紹介しています。SKILL.mdの名前と説明だけを常にシステムプロンプトへ載せておき、
+        関連しそうな場面で本文を読み込み、さらに必要なら同梱の参照ファイルを読み込むという3段階の
+        「プログレッシブディスクロージャー」により、使わないスキルの分までコンテキストを圧迫しない
+        設計になっています。
+      </p>
+
+      <h2>動かす場所を選ぶ、SDKとホスト型基盤</h2>
+      <p>
+        考え方と材料が揃ったら、実際にどこでエージェントを動かすかという話になります。ここは自分で組む
+        場合と、Anthropicのホスト型基盤に任せる場合とで記事が分かれています。
+      </p>
+      <p>
+        <a href="https://claude.com/blog/building-agents-with-the-claude-agent-sdk">Building agents with the Claude Agent SDK</a>
+        （2025年9月公開）は、Claude Codeの内部で使われている土台をSDKとして切り出したものの紹介です。
+        「エージェントにコンピュータを与える」という発想のもと、コンテキスト収集・アクション実行・
+        成果検証・反復改善という4段階のフィードバックループを自分のアプリケーションに組み込めます。
+        コーディング以外にも、金融分析や旅行手配、カスタマーサポートなど幅広い用途を想定していると
+        書かれています。
+      </p>
+      <p>
+        <a href="https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents">Effective harnesses for long-running agents</a>
+        （2025年11月公開）は、1つのコンテキストウィンドウに収まらないほど長く動くエージェントを、
+        自前の「ハーネス」（実行環境と管理の仕組み）でどう支えるかという実例です。最初のセッションで
+        200件を超える要件をJSONの機能リストに書き出し、以降のセッションは1機能ずつ着実に進めては
+        コミットする、という2段階構成が紹介されています。テストを勝手に削除・改変させないよう明示的に
+        禁止する一文を加えたという工夫は、AIエージェントが完了したことにしてしまう挙動への率直な対処
+        として印象的です。
+      </p>
+      <p>
+        <a href="https://www.anthropic.com/engineering/managed-agents">Scaling Managed Agents: Decoupling the brain from the hands</a>
+        （2026年4月公開）は、上記のような長時間エージェントをAnthropicがホスト型サービスとして提供する
+        際の設計を解説しています。頭脳にあたるClaudeと処理ループ、手足にあたるサンドボックスや外部
+        ツール、セッション記録を1つのコンテナに詰め込むのではなく別々のリソースへ切り離すことで、
+        サンドボックスが落ちても頭脳側の状態は失われず、認証情報もサンドボックスの外に安全に置ける
+        ようになったといいます。自前でハーネスを組む前段の記事と、ホスト型に任せる際の設計をまとめた
+        この記事は、対になる関係にあります。
+      </p>
+
+      <h2>ちゃんと機能しているかを測る</h2>
+      <p>
+        <a href="https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents">Demystifying evals for AI agents</a>
+        （2026年1月公開）は、エージェントの評価が単発のチャット応答の評価よりなぜ難しいかを整理した
+        記事です。自律性が高く、同じ入力でも毎回違う経路を辿るため、発言内容だけでなく実際に環境が
+        どう変化したか（例えば予約システムに本当に予約が入っているか）まで確認する必要があると説きます。
+        ツール呼び出しや推論を含む一部始終である<strong>trajectory</strong>と、試行終了時点の状態である
+        <strong>outcome</strong>を区別すること、コードベース・モデルベース・人手という3種類の採点方法を
+        使い分けること、非決定性に対応するためpass@k（k回中1回でも成功）とpass^k（k回とも成功）の両方で
+        見ることなど、評価設計の実務的な原則が並びます。
+      </p>
+
+      <h2>土台にあるプロトコル、MCP</h2>
+      <p>
+        ここまでの記事の随所で前提になっているのが、Model Context Protocol（MCP）です。
+        <a href="https://www.anthropic.com/news/model-context-protocol">Introducing the Model Context Protocol</a>
+        （2024年11月公開）は、AIアシスタントを外部のデータソースやツールに接続するための、Anthropicが
+        提案したオープンな標準規格です。データを提供する側のMCPサーバーと、AIアプリケーション側の
+        MCPクライアントという2層構造で、接続先ごとに個別実装が必要だった状態を単一のプロトコルに
+        置き換えることを狙っています。
+      </p>
+      <p>
+        <a href="https://www.anthropic.com/news/donating-the-model-context-protocol-and-establishing-of-the-agentic-ai-foundation">Donating the Model Context Protocol and establishing the Agentic AI Foundation</a>
+        （2025年12月公開）では、AnthropicがMCPをLinux Foundation傘下の新設団体Agentic AI Foundationへ
+        寄贈したことが発表されています。共同創設者にはBlockやOpenAIも名を連ね、Blockのgoose、OpenAIの
+        AGENTS.mdと並ぶファウンディングプロジェクトという位置づけです。公開から1年ほどで1万を超える
+        MCPサーバーが稼働しているという実績を背景に、特定企業に依存しない中立な標準として運営を続けて
+        いく意思表示だと言えます。
+      </p>
+
+      <h2>読む順番に迷ったら</h2>
+      <p>
+        情報量が多いので、目的別に入り口を絞ると読みやすくなります。初めてエージェントを設計するなら
+        Building Effective AI AgentsとClaude Codeのベストプラクティスの2本で十分に土台ができます。
+        ツールやプロンプトの精度で悩んでいるならWriting effective tools for AI agentsとEffective context
+        engineeringが直接効きます。本番投入や長時間運用が課題ならEffective harnessesとScaling Managed
+        Agentsを、複数エージェントの構成に興味があればマルチエージェント研究システムの記事を読むのが
+        早道です。全部を一度に読む必要はありません。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://www.anthropic.com/engineering/building-effective-agents">Building Effective AI Agents（Anthropic Engineering）</a></li>
+        <li><a href="https://code.claude.com/docs/en/best-practices">Best practices for Claude Code（Claude Docs）</a></li>
+        <li><a href="https://www.anthropic.com/engineering/multi-agent-research-system">How we built our multi-agent research system（Anthropic Engineering）</a></li>
+        <li><a href="https://www.anthropic.com/engineering/writing-tools-for-agents">Writing effective tools for AI agents, using AI agents（Anthropic Engineering）</a></li>
+        <li><a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Effective context engineering for AI agents（Anthropic Engineering）</a></li>
+        <li><a href="https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills">Equipping agents for the real world with Agent Skills（Anthropic Engineering）</a></li>
+        <li><a href="https://claude.com/blog/building-agents-with-the-claude-agent-sdk">Building agents with the Claude Agent SDK（Claude Blog）</a></li>
+        <li><a href="https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents">Effective harnesses for long-running agents（Anthropic Engineering）</a></li>
+        <li><a href="https://www.anthropic.com/engineering/managed-agents">Scaling Managed Agents: Decoupling the brain from the hands（Anthropic Engineering）</a></li>
+        <li><a href="https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents">Demystifying evals for AI agents（Anthropic Engineering）</a></li>
+        <li><a href="https://www.anthropic.com/news/model-context-protocol">Introducing the Model Context Protocol（Anthropic News）</a></li>
+        <li><a href="https://www.anthropic.com/news/donating-the-model-context-protocol-and-establishing-of-the-agentic-ai-foundation">Donating the Model Context Protocol and establishing the Agentic AI Foundation（Anthropic News）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
