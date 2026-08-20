@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>スマホの写真の保存先、Google DriveとAmazon S3を比較する — tech-memo</title>
+  <meta name="description" content="スマホの写真の保存先としてGoogle DriveとAmazon S3を検討する人向けに、公式サイトの最新料金をもとに月額コストと使い勝手の違いを比較した技術ノート。">
+  <meta name="article:category" content="tools">
+  <meta name="article:summary" content="スマホの写真をどこに保存するか、Google DriveとAmazon S3を料金と使い勝手で比較する。公式の最新料金をもとに100GBと2TBで実際にいくらかかるか計算し、バックアップの手軽さの違いも整理する。">
+  <meta name="article:tags" content="Google Drive,Amazon S3,クラウドストレージ,料金比較,バックアップ">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>スマホの写真の保存先、Google DriveとAmazon S3を比較する</h1>
+      <p class="note-meta">
+        <span class="badge badge--tools">ツール</span>
+        <time datetime="2026-08-20">2026-08-20</time>
+      </p>
+
+      <p>
+        スマホの空き容量が減ってきて、写真の保存先を考えたことのある人は多いはずです。定番は
+        Google One（Google Driveの有料プラン）への課金ですが、エンジニアなら「Amazon S3に
+        直接置けばもっと安いのでは」と考えたことがあるかもしれません。S3は生のストレージ
+        サービスなので、Google製品を経由しない分、価格に無駄がなさそうに見えます。
+      </p>
+      <p>
+        実際のところどうなのか、両サービスの公式サイトから最新の料金を確認し、100GBや2TBと
+        いった具体的な容量でいくらかかるかを計算してみました。あわせて、写真の保存先として
+        使う場合の使い勝手の違いも整理します。
+      </p>
+
+      <h2>そもそもAmazon S3とは何か</h2>
+      <p>
+        Amazon S3（Simple Storage Service）は、AWSが提供するオブジェクトストレージです。
+        ファイルを「オブジェクト」として、バケットと呼ぶ入れ物に保存する仕組みで、容量の
+        上限は事実上ありません。動画配信サービスの配信基盤から個人開発アプリのファイル
+        保存先まで、幅広く使われているクラウドストレージの基盤インフラです。
+      </p>
+      <p>
+        一方、今回比較するGoogle One側の実体はGoogle Photos（写真専用アプリ）とGoogle
+        Drive、Gmailで共有する容量です。Google Driveという製品単体ではなく、正確には
+        「Google Photos・Drive・Gmailの合計容量を増やす有料プラン」の話になります。
+        Webサービスとしてそのまま使えるGoogle Oneに対し、S3は素材としてのストレージという
+        性格が強く、写真の保存に使うには自分で環境を組む必要があります。この違いが、
+        後述する使い勝手の差につながります。
+      </p>
+
+      <h2>写真がクラウドに届くまでの道のり</h2>
+      <p>
+        スマホで撮った写真が実際にクラウドへ保存されるまでの手順を比べると、その差は
+        歴然としています。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 860 220" style="--diagram-min-width: 600px" role="img" aria-labelledby="upload-flow-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="upload-flow-title">スマートフォンで撮った写真がクラウドストレージに保存されるまでの流れ。Google Photosは撮影から自動アップロードまで3ステップで完了するのに対し、Amazon S3はAWSアカウント作成やアップロードツールの準備など手動での作業を含む5ステップが必要になる。</title>
+          <defs>
+            <marker id="upload-flow-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <text class="label label--muted" x="20" y="18" text-anchor="start">Google Photos（自動バックアップ）</text>
+          <rect class="node node--accent" x="20"  y="30" width="150" height="60" rx="8"/>
+          <rect class="node node--accent" x="186" y="30" width="150" height="60" rx="8"/>
+          <rect class="node node--accent" x="352" y="30" width="150" height="60" rx="8"/>
+          <text class="label" x="95"  y="66" text-anchor="middle">撮影</text>
+          <text class="label" x="261" y="66" text-anchor="middle">自動アップロード</text>
+          <text class="label" x="427" y="66" text-anchor="middle">保存完了</text>
+          <path class="arrow" d="M170 60 L186 60" marker-end="url(#upload-flow-arrow)"/>
+          <path class="arrow" d="M336 60 L352 60" marker-end="url(#upload-flow-arrow)"/>
+
+          <text class="label label--muted" x="20" y="128" text-anchor="start">Amazon S3（手動セットアップ）</text>
+          <rect class="node" x="20"  y="140" width="150" height="60" rx="8"/>
+          <rect class="node" x="186" y="140" width="150" height="60" rx="8"/>
+          <rect class="node" x="352" y="140" width="150" height="60" rx="8"/>
+          <rect class="node" x="518" y="140" width="150" height="60" rx="8"/>
+          <rect class="node" x="684" y="140" width="150" height="60" rx="8"/>
+          <text class="label" x="95"  y="176" text-anchor="middle">撮影</text>
+          <text class="label" x="261" y="176" text-anchor="middle">AWS登録</text>
+          <text class="label" x="427" y="176" text-anchor="middle">ツール準備</text>
+          <text class="label" x="593" y="176" text-anchor="middle">手動アップロード</text>
+          <text class="label" x="759" y="176" text-anchor="middle">バケットに保存</text>
+          <path class="arrow" d="M170 170 L186 170" marker-end="url(#upload-flow-arrow)"/>
+          <path class="arrow" d="M336 170 L352 170" marker-end="url(#upload-flow-arrow)"/>
+          <path class="arrow" d="M502 170 L518 170" marker-end="url(#upload-flow-arrow)"/>
+          <path class="arrow" d="M668 170 L684 170" marker-end="url(#upload-flow-arrow)"/>
+        </svg>
+        <figcaption>図1: 写真がクラウドに届くまでの道のり。Google Photosはアプリが自動でバックアップするのに対し、Amazon S3は環境構築とアップロードを自分で行う必要がある。</figcaption>
+      </figure>
+
+      <p>
+        Google Photosは、スマホにアプリを入れてバックアップをオンにするだけで、以降は
+        撮影した写真が自動でアップロードされ続けます。設定はものの数分です。
+      </p>
+      <p>
+        一方でS3を写真の保存先にするには、まずAWSアカウントを作成し（クレジットカードの
+        登録が必須です）、root権限をむき出しで使わないようIAMユーザーを別途作成し、
+        アップロード用のツール（AWS CLIやサードパーティ製アプリ）を用意してから、
+        ようやく手動でのアップロードにたどり着きます。しかもAWSは、S3向けの公式な
+        「写真自動バックアップアプリ」を提供していません。S3を写真バックアップに使って
+        いる人の多くは、サードパーティ製アプリか自作のスクリプトに頼っているのが実情です。
+      </p>
+      <p>
+        なお、S3の「フォルダ」はGoogle Driveのような実体のあるフォルダではなく、
+        ファイル名（オブジェクトキー）に含まれる「/」区切りを見た目上フォルダのように
+        表示しているだけです。慣れれば気にならない仕様ですが、最初は戸惑うポイントです。
+      </p>
+      <p>
+        閲覧や共有のしやすさにも差があります。Google Photosは人・場所・モノで写真を
+        検索でき、共有はリンクを発行するだけで済みます。S3のマネジメントコンソールは
+        あくまで汎用のファイル一覧で、写真専用のギャラリー表示はありません。共有も、
+        オブジェクトやバケットを公開設定にする（設定を誤ると誰でも閲覧できてしまう、
+        実際に何度も話題になっている事故のパターンです）か、期限付きの署名付きURLを
+        発行するかのどちらかで、カジュアルに人に見せるという用途には不向きです。
+      </p>
+
+      <h2>料金を比べる</h2>
+      <p>
+        次に料金です。以下は2026年8月時点、両サービスの公式サイトに掲載されている
+        金額です（Google Oneは日本円表示、S3は東京リージョンの料金）。
+      </p>
+      <p>
+        現在のラインアップは4段階です。無料の15GBに加えて、有料プランはBasic
+        （100GB）が月額290円、Google AI Plus（2TB）が月額1,450円、Google AI Pro
+        （5TB）が月額2,900円となっています。2026年5月のリニューアルで、以前あった
+        200GBプランはラインアップから外れ、2TB以上のプランにはGemini（Googleの
+        生成AI機能）へのアクセスが標準で付くようになりました。純粋なストレージだけを
+        比べたい場合、この点は少し注意が必要です。
+      </p>
+      <p>
+        対するS3 Standard（東京リージョン）の料金は、大きく3つの要素に分かれます。
+        ストレージが1GBあたり月0.025ドル、リクエストはアップロード（PUT）が
+        1,000回あたり0.0047ドル、閲覧（GET）が1,000回あたり0.00037ドルとごくわずか
+        です。そして外部へのデータ転送は、月100GBまでは無料（AWS全体で共通の無料枠）、
+        それを超えると1GBあたり0.114ドルからとなっています。個人の写真保存という
+        用途では、リクエスト料金はほぼ無視できる金額です。焦点になるのはストレージ
+        料金と、データ転送量が無料枠を超えるかどうかです。
+      </p>
+
+      <h2>実際にいくらかかるか</h2>
+      <p>
+        1ドル160円で概算すると、実際の月額はこうなります（S3側はストレージ料金のみ）。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 420 250" style="--diagram-min-width: 300px" role="img" aria-labelledby="cost-compare-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="cost-compare-title">月額料金の比較。100GBではGoogle One（290円）とS3ストレージのみ（400円）の差は小さいが、2TBではGoogle One（1450円）に対しS3ストレージのみ（8000円）と差が大きく開く。</title>
+          <line class="arrow" x1="20" y1="200" x2="400" y2="200"/>
+          <text class="label" x="100" y="20" text-anchor="middle">100GBの場合</text>
+          <rect class="node node--accent" x="40"  y="98.5" width="50" height="101.5" rx="4"/>
+          <rect class="node" x="110" y="60" width="50" height="140" rx="4"/>
+          <text class="label" x="65"  y="90.5" text-anchor="middle">290円</text>
+          <text class="label" x="135" y="52" text-anchor="middle">400円</text>
+          <text class="label label--muted" x="65"  y="216" text-anchor="middle">Google One</text>
+          <text class="label label--muted" x="135" y="216" text-anchor="middle">S3のみ</text>
+
+          <text class="label" x="320" y="20" text-anchor="middle">2TBの場合</text>
+          <rect class="node node--accent" x="260" y="174.6" width="50" height="25.4" rx="4"/>
+          <rect class="node" x="330" y="60" width="50" height="140" rx="4"/>
+          <text class="label" x="285" y="166.6" text-anchor="middle">1,450円</text>
+          <text class="label" x="355" y="52" text-anchor="middle">8,000円</text>
+          <text class="label label--muted" x="285" y="216" text-anchor="middle">Google One</text>
+          <text class="label label--muted" x="355" y="216" text-anchor="middle">S3のみ</text>
+        </svg>
+        <figcaption>図2: 容量ごとの月額料金比較（ストレージ分のみ、S3はリクエスト・転送量を含まず、1ドル160円で概算）。容量が増えるほどS3とGoogle Oneの差は開く。</figcaption>
+      </figure>
+
+      <p>
+        たとえばスマホの写真2万枚（1枚5MBとすると、目安としてちょうど100GBほど）を
+        保存する場合を考えます。ストレージ料金だけならS3は100GB&times;0.025ドル=2.5ドル、
+        日本円で約400円です。月に何百枚か見返したり家族に共有したりする程度の使い方なら、
+        データ転送量は無料枠の100GBに収まるので、リクエスト料金を足しても月400円強で
+        収まる計算です。それでもGoogle OneのBasic（100GB、月額290円）のほうが安く、
+        しかもPhotos・Drive・Gmailの容量として共有で使えます。
+      </p>
+      <p>
+        2TBの場合はさらに差が開きます。S3のストレージ料金だけで2,000GB&times;0.025ドル=
+        50ドル、日本円で約8,000円。Google AI Plus（2TB、月額1,450円）の<strong>5倍以上</strong>です。
+        オブジェクトストレージの素の単価は、コンシューマー向けに調整されたGoogle Oneの
+        バンドル価格にはかなわない、というのが実際に計算してみて分かったことでした。
+      </p>
+
+      <h2>それでもS3が向いている場面</h2>
+      <p>
+        とはいえS3が常に不利というわけではありません。写真の枚数が数十万枚を超える
+        業務用途、他のAWSサービス（Lambdaで画像を自動リサイズする、など）と連携させたい
+        場合、あるいはめったに見返さない写真をS3 Glacier（1GBあたり月0.0045ドルと
+        Standardの5分の1以下）のような低頻度アクセス向けストレージクラスへ移して
+        長期保管する場合には、S3のほうが理にかなうことがあります。ただしGlacierは
+        取り出しに数時間かかるうえ取り出し自体にも料金がかかるため、「たまに見返す」
+        用途には向きません。あくまで「二度と見ないかもしれないが消したくはない」
+        バックアップ向けの選択肢です。
+      </p>
+
+      <h2>Amazonブランドで探すならAmazon Photosという手も</h2>
+      <p>
+        ちなみに、Amazonが提供する消費者向けの写真保存サービスとしては、S3とは別に
+        Amazon Photosがあります。公式サイトで確認したところ、Amazonプライム会員
+        （月額600円ほど）なら、写真をフル解像度・容量無制限で保存できる特典です
+        （動画は別途上限あり）。「Amazonブランドで揃えたいけれど、写真専用のアプリが
+        欲しい」という場合は、S3を自分で組むよりこちらのほうが現実的な選択肢になります。
+      </p>
+
+      <h2>選び方</h2>
+      <p>
+        ここまでの内容を踏まえると、選び方はシンプルです。スマホの写真を手間なく
+        自動で保存したいなら、迷わずGoogle One（すでにAmazonプライム会員ならAmazon
+        Photosも候補）を選ぶのがよいでしょう。料金でも使い勝手でも、そちらのほうが
+        優れています。S3が候補に挙がるのは、プログラムから写真を扱いたい、他のAWS
+        サービスと連携したい、すでにAWSを本業で使っていて勝手が分かっている、
+        といった技術的な理由がある場合に限られます。「安そうだから」という理由だけで
+        S3を選ぶのは、少なくとも個人の写真保存という用途では、<strong>今回計算した限り
+        分が悪そうです</strong>。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://one.google.com/about/plans">Google One の料金プラン（Google公式）</a></li>
+        <li><a href="https://aws.amazon.com/s3/pricing/">Amazon S3 の料金（AWS公式）</a></li>
+        <li><a href="https://aws.amazon.com/s3/storage-classes/">Amazon S3 ストレージクラス（AWS公式）</a></li>
+        <li><a href="https://aws.amazon.com/free/">AWS 無料利用枠（AWS公式）</a></li>
+        <li><a href="https://aws.amazon.com/blogs/aws/aws-free-tier-data-transfer-expansion-100-gb-from-regions-and-1-tb-from-amazon-cloudfront-per-month">AWSの無料データ転送枠拡大について（AWS公式ブログ）</a></li>
+        <li><a href="https://www.amazon.co.jp/amazonphotos">Amazon Photos（Amazon公式）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
