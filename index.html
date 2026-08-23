@@ -37,6 +37,16 @@
       <li role="presentation"><button type="button" class="category-filter__chip" data-filter="misc"     aria-pressed="false">その他</button></li>
     </ul>
 
+    <!-- 絞り込み検索。カードのタイトル・要約・タグ・日付を対象にする。 -->
+    <div class="note-search">
+      <label class="visually-hidden" for="note-search-input">キーワードでノートを絞り込む</label>
+      <input type="search" id="note-search-input" class="note-search__input"
+             placeholder="キーワードで絞り込み（例: Cloudflare、エージェント）" autocomplete="off">
+    </div>
+
+    <!-- 絞り込み結果の件数。JS が書き込むまでは空にしておく。 -->
+    <p class="note-list__status" role="status" aria-live="polite"></p>
+
     <!--
       公開済みノートはここにカードとして追加する。
       未完成の記事は notes/_drafts/ に置き、ここからはリンクしないこと（AGENTS.md 参照）。
@@ -388,27 +398,126 @@
   </footer>
 
   <script>
-    // カテゴリフィルタ：チップ押下で .note-card[data-category] を絞り込む。
-    // ノートが0件のときは empty メッセージを出す。依存なし、20行ほどの最小実装。
+    // ノート一覧の絞り込み。カテゴリ（チップ）とキーワード（検索欄）の AND で絞る。
+    // 状態は ?cat= と ?q= に載せるので、絞り込んだ結果をそのまま共有・再訪できる。
+    // 依存なし。JS が動かない場合はカードが全件見えるだけで、閲覧の妨げにはならない。
     (function () {
-      const chips = document.querySelectorAll('.category-filter__chip');
-      const cards = document.querySelectorAll('.note-card');
+      const chips = Array.from(document.querySelectorAll('.category-filter__chip'));
+      const cards = Array.from(document.querySelectorAll('.note-card'));
       const empty = document.querySelector('.note-list__empty');
+      const input = document.querySelector('.note-search__input');
+      const status = document.querySelector('.note-list__status');
+      const toolbar = document.querySelector('.category-filter');
       if (!chips.length || !cards.length) return;
+
+      // 検索対象テキストは変化しないので最初に1度だけ作る。
+      // カード全体の textContent なのでタイトル・要約・タグ・日付が対象になる。
+      const haystack = new Map(
+        cards.map((card) => [card, (card.textContent || '').toLowerCase().replace(/\s+/g, ' ')])
+      );
+
+      let category = 'all';
+      let query = '';
+
+      // file:// では origin が null になり history 操作が例外を投げる。
+      // /draft・/publish はローカルファイルを直接開いて表示確認するため、
+      // ここで throw させるとその手順が壊れる。握りつぶすのが正しい。
+      function syncUrl(replace) {
+        try {
+          const url = new URL(window.location.href);
+          if (category === 'all') url.searchParams.delete('cat');
+          else url.searchParams.set('cat', category);
+          if (query) url.searchParams.set('q', query);
+          else url.searchParams.delete('q');
+          history[replace ? 'replaceState' : 'pushState']({ category, query }, '', url);
+        } catch (e) {
+          /* file:// では URL に状態を残せない。絞り込み自体は動く。 */
+        }
+      }
+
+      function readUrl() {
+        try {
+          const params = new URL(window.location.href).searchParams;
+          const cat = params.get('cat');
+          category = chips.some((c) => c.dataset.filter === cat) ? cat : 'all';
+          query = params.get('q') || '';
+        } catch (e) {
+          category = 'all';
+          query = '';
+        }
+      }
+
+      function apply() {
+        const q = query.trim().toLowerCase();
+        let visible = 0;
+        cards.forEach((card) => {
+          const match =
+            (category === 'all' || card.dataset.category === category) &&
+            (!q || haystack.get(card).includes(q));
+          card.hidden = !match;
+          if (match) visible++;
+        });
+
+        chips.forEach((chip) => {
+          const on = chip.dataset.filter === category;
+          chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+          // roving tabindex: Tab では選択中のチップだけに止まり、
+          // チップ間の移動は矢印キーで行う（role="toolbar" の作法）。
+          chip.tabIndex = on ? 0 : -1;
+        });
+
+        if (empty) empty.hidden = visible !== 0;
+        if (input && input.value !== query) input.value = query;
+        if (status) {
+          status.textContent =
+            visible === cards.length
+              ? cards.length + ' 件すべて表示中'
+              : visible + ' 件表示中（全 ' + cards.length + ' 件）';
+        }
+      }
 
       chips.forEach((chip) => {
         chip.addEventListener('click', () => {
-          const filter = chip.dataset.filter;
-          chips.forEach((c) => c.setAttribute('aria-pressed', c === chip ? 'true' : 'false'));
-          let visible = 0;
-          cards.forEach((card) => {
-            const match = filter === 'all' || card.dataset.category === filter;
-            card.hidden = !match;
-            if (match) visible++;
-          });
-          if (empty) empty.hidden = visible !== 0;
+          category = chip.dataset.filter;
+          apply();
+          syncUrl(false); // チップ押下は履歴に残す（戻るで前の絞り込みに戻れる）
         });
       });
+
+      // role="toolbar" は「矢印キーで移動できる」ことを支援技術に約束している。
+      // これが無いとマークアップが嘘をつくことになるので実装する。
+      if (toolbar) {
+        toolbar.addEventListener('keydown', (event) => {
+          const current = chips.indexOf(document.activeElement);
+          if (current < 0) return;
+          let next = null;
+          if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (current + 1) % chips.length;
+          else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (current - 1 + chips.length) % chips.length;
+          else if (event.key === 'Home') next = 0;
+          else if (event.key === 'End') next = chips.length - 1;
+          if (next === null) return;
+          event.preventDefault();
+          chips[current].tabIndex = -1;
+          chips[next].tabIndex = 0;
+          chips[next].focus();
+        });
+      }
+
+      if (input) {
+        input.addEventListener('input', () => {
+          query = input.value;
+          apply();
+          syncUrl(true); // 入力1文字ごとに履歴を増やさない
+        });
+      }
+
+      window.addEventListener('popstate', () => {
+        readUrl();
+        apply();
+      });
+
+      readUrl();
+      apply();
     })();
   </script>
 </body>
