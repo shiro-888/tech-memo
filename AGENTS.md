@@ -28,12 +28,19 @@
 │   │   └── <slug>.html     # 下書きは <slug>.html を直置き（2 階層下）
 │   └── <公開日-スラッグ>/    # 公開済みノート（例: 2026-06-28-foo/）
 │       └── index.html
+├── tools/
+│   └── check_consistency.py # index.html のカードと記事メタの一致を検査（CI で実行）
 ├── AGENTS.md               # このファイル
 ├── README.md
 ├── .pre-commit-config.yaml # ガードレール（gitleaks 等）
 ├── .gitleaks.toml
 └── .gitignore
 ```
+
+> **カードと記事メタの二重管理について**: `index.html` のカードは記事 `<head>` の
+> `article:*` を手作業でコピーしたもので、実体が 2 箇所にある。公開済み記事の
+> 要約やタイトルを直したら `index.html` のカードも必ず同時に直すこと。
+> 忘れると `tools/check_consistency.py`（CI の `guardrails` ジョブ）が落ちる。
 
 ## 新しいノートを追加する手順
 
