@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>必要な時だけ専門知識を読み込む、AIエージェントのAgent Skills入門 — tech-memo</title>
+  <meta name="description" content="AIエージェントに専門知識を教える仕組みAgent Skillsを、その正体からプログレッシブディスクロージャーという読み込み方まで、たとえ話を交えて易しく解説する技術ノート。">
+  <meta name="article:category" content="ai">
+  <meta name="article:summary" content="AIエージェントに専門知識を教える仕組みAgent Skillsを、なぜ生まれたか、どう読み込まれるか（プログレッシブディスクロージャー）、既存の仕組みとの違いまで、たとえ話を交えて易しく解説する。">
+  <meta name="article:tags" content="Agent Skills,Claude Code,AIエージェント,SKILL.md,プロンプトエンジニアリング">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>必要な時だけ専門知識を読み込む、AIエージェントのAgent Skills入門</h1>
+      <p class="note-meta">
+        <span class="badge badge--ai">AI</span>
+        <time datetime="2026-08-23">2026-08-23</time>
+      </p>
+
+      <p>
+        実はこの記事を書く作業自体、Skillsという仕組みの上で進んでいます。技術ノートの
+        文体ルール、公開前のチェックリスト、コミットしてpushするまでの手順。どれも
+        普段の雑談には出てこない専門知識で、必要になった瞬間だけ読み込まれています。
+      </p>
+      <p>
+        この「必要な時だけ知識を読み込む」という発想を、Anthropicは<strong>Agent
+        Skills</strong>というオープンな仕組みとして整理しました。名前は大げさですが、
+        中身は驚くほど単純です。このノートでは専門用語を避けながら、仕組みと嬉しさを
+        かみ砕いて説明します。
+      </p>
+
+      <h2>そもそも何に困っていたのか</h2>
+      <p>
+        AIエージェント（自律的にタスクをこなすAI）は基本的に何でも屋です。コードも
+        書けるし文章も書けるし、簡単な調べ物もできます。ただしそれは「広く浅く」の
+        裏返しでもあります。特定の業務の細かい手順や、独自の書式のドキュメントといった
+        狭くて深い知識は苦手です。
+      </p>
+      <p>
+        こうした専門知識を教える一番手軽な方法は、会話のたびに指示を貼り付けることです。
+        ただ同じ指示を何度も貼るのは面倒ですし、かといって最初から全部を指示ファイルに
+        詰め込んでおくと、使わない知識まで毎回の会話にのしかかり、コンテキストウィンドウ
+        （AIが一度に読み込める情報量の上限）を無駄に圧迫します。Agent Skillsは、
+        この板挟みを解消するために作られました。
+      </p>
+
+      <h2>中身はただのフォルダ</h2>
+      <p>
+        Agent Skillの正体は、<code>SKILL.md</code>というファイルを含む、ただの
+        フォルダです。
+      </p>
+      <pre><code>my-skill/
+├── SKILL.md      （必須。何をするスキルかと、その手順）
+├── scripts/      （任意。実行するスクリプト）
+├── references/   （任意。詳しい参考資料）
+└── assets/       （任意。テンプレートなど）
+</code></pre>
+      <p>
+        SKILL.md自体もシンプルです。ファイルの先頭にname（名前）とdescription
+        （このスキルが何をするものかの説明）を書き、その下に本文として具体的な手順を
+        書くだけです。
+      </p>
+      <pre><code>---
+name: commit-message
+description: gitの差分から適切なコミットメッセージを作る。コミットしたいときに使う
+---
+
+1. git diffで変更内容を確認する
+2. 変更の意図が伝わる1行の要約を書く
+3. 必要なら詳細を箇条書きで補足する
+</code></pre>
+
+      <h2>3段階で「小出し」にする仕組み</h2>
+      <p>
+        Skillsの核心は、<strong>プログレッシブディスクロージャー</strong>
+        （段階的な開示）と呼ばれる読み込み方にあります。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 740 240" style="--diagram-min-width: 500px" role="img" aria-labelledby="skill-flow-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="skill-flow-title">Agent Skillsが読み込まれる3段階の流れ。発見段階では各スキルの名前と説明だけが常に読み込まれ、起動段階でSKILL.md本文が読み込まれ、実行段階で必要に応じてスクリプトや参照ドキュメント、テンプレートなどの付属ファイルが追加で読み込まれる。</title>
+          <defs>
+            <marker id="skill-flow-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="node node--accent" x="20"  y="30" width="180" height="70" rx="8"/>
+          <rect class="node node--accent" x="230" y="30" width="180" height="70" rx="8"/>
+          <rect class="node node--accent" x="440" y="30" width="180" height="70" rx="8"/>
+          <text class="label" x="110" y="58" text-anchor="middle">発見</text>
+          <text class="label label--muted" x="110" y="80" text-anchor="middle">名前と説明だけ常駐</text>
+          <text class="label" x="320" y="58" text-anchor="middle">起動</text>
+          <text class="label label--muted" x="320" y="80" text-anchor="middle">本文を読み込む</text>
+          <text class="label" x="530" y="58" text-anchor="middle">実行</text>
+          <text class="label label--muted" x="530" y="80" text-anchor="middle">付属ファイルも読み込む</text>
+          <path class="arrow" d="M200 65 L230 65" marker-end="url(#skill-flow-arrow)"/>
+          <path class="arrow" d="M410 65 L440 65" marker-end="url(#skill-flow-arrow)"/>
+
+          <rect class="node" x="349" y="170" width="110" height="50" rx="6"/>
+          <rect class="node" x="475" y="170" width="110" height="50" rx="6"/>
+          <rect class="node" x="601" y="170" width="110" height="50" rx="6"/>
+          <text class="label" x="404" y="200" text-anchor="middle">スクリプト</text>
+          <text class="label" x="530" y="200" text-anchor="middle">参照ドキュメント</text>
+          <text class="label" x="656" y="200" text-anchor="middle">テンプレート等</text>
+          <path class="arrow" d="M530 100 L530 135 L404 135 L404 170" marker-end="url(#skill-flow-arrow)"/>
+          <path class="arrow" d="M530 100 L530 170" marker-end="url(#skill-flow-arrow)"/>
+          <path class="arrow" d="M530 100 L530 135 L656 135 L656 170" marker-end="url(#skill-flow-arrow)"/>
+        </svg>
+        <figcaption>図1: プログレッシブディスクロージャーの3段階。使わない知識は会話に乗ってこない。</figcaption>
+      </figure>
+
+      <p>
+        1段階目の<strong>発見</strong>で常駐しているのは、各スキルの名前と説明だけです。
+        たとえ何十個スキルが用意されていても、そのぶんで会話が重くなることはほぼ
+        ありません。名前と説明を合わせても、せいぜい数行だからです。
+      </p>
+      <p>
+        2段階目の<strong>起動</strong>は、今の会話の内容とスキルの説明が噛み合った
+        タイミングで起こります。SKILL.md本文がまるごと会話に読み込まれ、そこに書かれた
+        手順に沿って動き出します。
+      </p>
+      <p>
+        3段階目の<strong>実行</strong>では、SKILL.md本文だけでは足りない場合に、
+        同じフォルダに入っている参照ドキュメントやスクリプトが必要な分だけ追加で
+        読み込まれます。分厚いマニュアルの目次だけ持ち歩いておいて、該当ページだけを
+        その都度開くようなイメージです。
+      </p>
+
+      <h2>たとえ話で言うと</h2>
+      <p>
+        新しく入った職場を思い浮かべてみてください。入社初日に全部署のマニュアルを
+        丸暗記させられることはありません。まずは「経費精算のやり方は総務のマニュアルを
+        見ればいい」ということだけ知っておいて、実際に経費精算が必要になったタイミングで
+        そのマニュアルを開く。Agent Skillsがやっていることも、これに近い発想です。
+      </p>
+
+      <h2>何が嬉しいのか</h2>
+      <p>
+        一番の利点はコンテキストの節約です。使わない知識は会話に乗ってこないので、
+        たくさんのスキルを用意しておいても、普段の会話が重くならずに済みます。
+      </p>
+      <p>
+        もう一つの利点は使い回しやすさです。フォルダ1つなので、gitで管理してチームで
+        共有したり、プロジェクトをまたいで持ち運んだりできます。手順書を毎回コピペする
+        必要がありません。
+      </p>
+      <p>
+        そしてAgent Skillsは、Anthropicが原案を作りつつも、オープンな仕様として
+        公開されています。Claude Codeだけでなく、Cursor、GitHub Copilot、VS Code、
+        ChatGPT（Codex）など、対応をうたうツールはすでに数十に及びます。特定のツール
+        専用の機能ではなく、複数のAIエージェントで使い回せる書式になりつつある、という
+        点は覚えておく価値があります。
+      </p>
+
+      <h2>似た仕組みとの違い</h2>
+      <p>
+        紛らわしいので、2つのものと比較しておきます。
+      </p>
+      <p>
+        まずCLAUDE.mdのような常駐の指示ファイルとの違いです。CLAUDE.mdに書いた内容は、
+        会話が始まった瞬間から常に読み込まれています。頻繁に使う短いルールには向きますが、
+        長くなるほど毎回のコストが上がります。Skillsは反対に使う時だけ読み込まれるので、
+        長い手順書を置いておいても普段のコストはほぼゼロのままです。
+      </p>
+      <p>
+        もう一つはMCPやツールとの違いです。MCP（Model Context Protocol）やツールは、
+        AIが外部のサービスやシステムに実際に働きかけるための「手」にあたります。対して
+        Skillsは、その手をどう動かすかという「手順書」に近い存在です。実際、SKILL.md
+        の中で「このツールをこの順番で使う」と指示することもよくあります。両者は対立する
+        ものではなく、組み合わせて使うものだと考えるとしっくりきます。
+      </p>
+
+      <h2>覚えておくといいこと</h2>
+      <p>
+        Agent Skillsを一言で言うと、よく使う手順や専門知識をフォルダに詰めて、必要な時
+        だけ開く仕組みです。難しい概念に見えて、実際にやっていることは新人研修の
+        マニュアルとそう変わりません。もし同じ指示を何度も会話に貼り付けている作業が
+        あれば、それは立派なSkill候補です。
+      </p>
+
+      <h2>参考リンク</h2>
+      <ul>
+        <li><a href="https://agentskills.io">Agent Skills（agentskills.io、オープン仕様の公式サイト）</a></li>
+        <li><a href="https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills">Equipping agents for the real world with Agent Skills（Anthropic Engineering）</a></li>
+        <li><a href="https://code.claude.com/docs/en/skills">Extend Claude with skills（Claude Code公式ドキュメント）</a></li>
+        <li><a href="https://github.com/anthropics/skills">anthropics/skills（GitHub、サンプルスキル集）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>

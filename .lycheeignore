@@ -8,3 +8,7 @@
 # openai.com はブラウザ以外の User-Agent に 403 を返すため、ページが生きていても
 # lychee からは Forbidden に見える。
 ^https://openai\.com/
+
+# amazon.co.jp は bot 判定（特に GitHub Actions ランナーの IP レンジ）に対して
+# 断続的に 503 を返すことがある。手元の curl / ブラウザでは到達確認済み。
+^https://www\.amazon\.co\.jp/
