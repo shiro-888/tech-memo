@@ -3,6 +3,10 @@
    情報を伝える設計。ビルドツールは使わない素のCSSのまま運用する。 */
 
 :root {
+  /* ライト/ダーク両対応を宣言する。フォームやスクロールバーなどブラウザ描画の
+     UI が、OS のテーマに合わせて描かれるようになる。 */
+  color-scheme: light dark;
+
   --max-width: 720px;
 
   /* base palette */
@@ -149,6 +153,16 @@ a {
 a:hover {
   text-decoration: underline;
   color: var(--color-link-hover);
+}
+
+/* ─────── focus（キーボード操作） ───────
+   :focus-visible なので、マウスクリック時には出ず Tab 移動時だけ出る。
+   トップのフィルタはボタン主体の UI なので、ここが無いとキーボードでは
+   今どこにいるのか分からなくなる。 */
+:is(a, button, input, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
 /* main */

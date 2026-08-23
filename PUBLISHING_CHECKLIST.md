@@ -15,6 +15,7 @@
 ## 技術（チェックの通過）
 
 - [ ] ローカルで `pre-commit run --all-files`（gitleaks 等）が通る
+- [ ] `python tools/check_consistency.py` が通る（カードと記事メタの一致）
 - [ ] PR の CI（`guardrails` ジョブ：gitleaks + lychee）がすべてグリーン
 - [ ] 下書きを `notes/_drafts/<slug>.html` から `notes/<公開日-スラッグ>/index.html` へ移動済み
 - [ ] `index.html` の `.note-list` に新しいリンクと `<time>` を追加済み

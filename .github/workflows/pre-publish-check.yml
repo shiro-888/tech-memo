@@ -25,6 +25,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Metadata consistency (index cards vs article heads)
+        # index.html のカードは記事 <head> の article:* を手作業でコピーしたもの。
+        # 公開済み記事を直したときにカード側が取り残されるのを防ぐ。
+        # ubuntu-latest には Python3 が同梱なので setup-python は不要。
+        run: python3 tools/check_consistency.py
+
       - name: Link check (lychee)
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:

@@ -26,4 +26,5 @@ pre-commit run --all-files  # 初回: 全ファイルに対して手動実行
 
 - ローカル: pre-commit + gitleaks（このリポジトリ）
 - GitHub: Secret scanning / Push protection（Settings で有効化）
-- CI: PR時の pre-publish-check（フェーズ3で追加予定）
+- CI: PR時の `guardrails` ジョブ（[.github/workflows/pre-publish-check.yml](./.github/workflows/pre-publish-check.yml)）で
+  gitleaks とリンク切れ検査（lychee）を実行
