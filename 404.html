@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ページが見つかりません — tech-memo</title>
+  <meta name="description" content="お探しのページは見つかりませんでした。">
+  <!--
+    404 は任意の深さの URL に対して配信されるため、相対パスだと解決できない。
+    ルート絶対パス（/tech-memo/...）も同じ問題を回避できるが、lychee が
+    ローカルファイルとして扱えず「Cannot resolve root-relative link」で
+    CI が落ちる（GitHub Pages のプロジェクトサイトという前提を知らないため）。
+    このファイルだけは常に完全な URL（スキーム + ホスト込み）を使う。
+  -->
+  <link rel="stylesheet" href="https://shiro-888.github.io/tech-memo/styles/site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">本文へスキップ</a>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="https://shiro-888.github.io/tech-memo/">tech-memo</a>
+      <p class="site-tagline">学んだことを書き留める技術ノート</p>
+    </div>
+  </header>
+
+  <main class="container" id="main">
+    <h1>ページが見つかりません</h1>
+    <p>
+      お探しのページは見つかりませんでした。URL が変わったか、削除された可能性があります。
+    </p>
+    <p>
+      <a href="https://shiro-888.github.io/tech-memo/">ノート一覧から探す</a>
+    </p>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>

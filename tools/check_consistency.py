@@ -197,6 +197,9 @@ class ArticleParser(_Base):
         self.h1: str | None = None
         self.badge_class: str | None = None
         self.badge_text: str | None = None
+        self.badge_href: str | None = None
+        self.has_skip_link = False
+        self.has_notice = False
         self.datetime: str | None = None
         self.date_text: str | None = None
         self._pending: str | None = None
@@ -225,8 +228,14 @@ class ArticleParser(_Base):
         elif tag == "h1" and self.h1 is None:
             self._pending = "h1"
             self._start_capture()
+        elif tag == "a" and "skip-link" in cls:
+            self.has_skip_link = True
+        elif tag == "p" and "site-notice--compact" in cls:
+            self.has_notice = True
         elif tag == "p" and "note-meta" in cls:
             self._in_note_meta = True
+        elif self._in_note_meta and tag == "a" and "badge-link" in cls:
+            self.badge_href = a.get("href")
         elif self._in_note_meta and tag == "span" and "badge" in cls:
             m = re.search(r"badge--(\w+)", cls)
             self.badge_class = m.group(1) if m else None
@@ -332,6 +341,16 @@ def check() -> Report:
             rep.error(rel, None, f"<title> は「<h1> + {TITLE_SUFFIX!r}」にしてください（現在: {ap.title!r}）")
         if cat and ap.badge_class and ap.badge_class != cat:
             rep.error(rel, None, f"記事内バッジ badge--{ap.badge_class} がカテゴリ {cat} と不一致")
+        # 記事内バッジは同カテゴリの一覧へのリンク。ここも二重管理なので検査する。
+        want_href = f"../../index.html?cat={cat}"
+        if not ap.badge_href:
+            rep.error(rel, None, f"記事内バッジが .badge-link で包まれていません（期待: {want_href}）")
+        elif cat and ap.badge_href != want_href:
+            rep.error(rel, None, f"バッジのリンク先 {ap.badge_href!r} がカテゴリ {cat} と不一致（期待: {want_href}）")
+        if not ap.has_skip_link:
+            rep.error(rel, None, "スキップリンク（.skip-link）がありません")
+        if not ap.has_notice:
+            rep.error(rel, None, "AI生成の注意書き（.site-notice--compact）がありません")
         if ap.datetime != date:
             rep.error(rel, None, f"<time datetime={ap.datetime!r}> がディレクトリ名の日付 {date} と不一致")
         if ap.date_text and ap.datetime and ap.date_text != ap.datetime:

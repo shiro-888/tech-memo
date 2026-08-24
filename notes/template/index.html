@@ -42,13 +42,14 @@
   -->
 </head>
 <body>
+  <a class="skip-link" href="#main">本文へスキップ</a>
   <header class="site-header">
     <div class="container">
       <a class="site-title" href="../../index.html">tech-memo</a>
     </div>
   </header>
 
-  <main class="container">
+  <main class="container" id="main">
     <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
 
     <article>
@@ -59,8 +60,12 @@
         バッジは badge--web / --security / --tools / --design / --infra / --ai / --misc から選ぶ。
       -->
       <p class="note-meta">
-        <span class="badge badge--misc">その他</span>
+        <a class="badge-link" href="../../index.html?cat=misc"><span class="badge badge--misc">その他</span></a>
         <time datetime="2026-01-01">2026-01-01</time>
+      </p>
+
+      <p class="site-notice site-notice--compact" role="note">
+        この記事は AI エージェントが作成しています。内容に誤りが含まれる場合があるため、重要な情報は公式ドキュメント等の一次情報でご確認ください。
       </p>
 
       <p>ここから本文を書く。</p>
