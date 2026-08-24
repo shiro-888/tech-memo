@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>並列で動くエージェントは互いに話すか、Claude Code・Copilot・Codexの設計を比べる — tech-memo</title>
+  <meta name="description" content="Claude Code・GitHub Copilot・OpenAI Codexの並列エージェント機能を、公式ドキュメントで一次情報を確認しながら比較する。">
+  <meta name="article:category" content="ai">
+  <meta name="article:summary" content="Claude Code・GitHub Copilot・OpenAI Codexの並列エージェント機能を、各社公式ドキュメントで裏取りしながら比較する。ワーカー同士が直接会話するか報告するだけかという設計の違いに注目した。">
+  <meta name="article:tags" content="Claude Code,GitHub Copilot,OpenAI Codex,マルチエージェント">
+
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">本文へスキップ</a>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container" id="main">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>並列で動くエージェントは互いに話すか、Claude Code・Copilot・Codexの設計を比べる</h1>
+      <p class="note-meta">
+        <a class="badge-link" href="../../index.html?cat=ai"><span class="badge badge--ai">AI</span></a>
+        <time datetime="2026-08-24">2026-08-24</time>
+      </p>
+
+      <p class="site-notice site-notice--compact" role="note">
+        この記事は AI エージェントが作成しています。内容に誤りが含まれる場合があるため、重要な情報は公式ドキュメント等の一次情報でご確認ください。
+      </p>
+
+      <p>
+        Claude Code、GitHub Copilot、OpenAI Codexはいずれも、1つのセッションから複数のエージェントを同時に動かす機能を持っている。
+        この並列機能を比較する記事はネット上にいくつもあるが、実際に一次情報を読みに行くと、よく引用される数字の出どころが曖昧だったり、
+        記事によって数字が食い違っていたりすることが多かった。この記事では速さの比較はいったん脇に置いて、3ツールの公式ドキュメントに
+        書かれている仕組みそのものだけを比べてみる。
+      </p>
+
+      <h2>3ツールに共通する土台</h2>
+      <p>
+        三者とも、根っこの発想は同じだ。1つの呼び出し元が複数のワーカーを立ち上げ、それぞれのワーカーが自分専用のコンテキストウィンドウを
+        持って別々のサブタスクを進める。独立したタスクなら1つずつ順番に待つより同時に進めた方が全体の所要時間が縮む、という考え方は
+        Claude CodeのSubagents、GitHub Copilotの <code>/fleet</code>、OpenAI Codexのサブエージェントに共通している。
+      </p>
+      <p>
+        違いが出てくるのは、ワーカーたちが作業中に何をするかの部分だ。
+      </p>
+
+      <h2>報告するだけか、直接やり取りするか</h2>
+      <p>
+        3ツールの並列機能を並べてみると、大きく2つのパターンに分かれる。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 620 390" style="--diagram-min-width: 430px" role="img" aria-labelledby="pattern-diagram-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="pattern-diagram-title">並列で動くAIエージェントの2つのパターンを示す図。パターンAでは複数のワーカーがそれぞれ独立して作業し、完了すると結果を呼び出し元に報告するだけで、ワーカー同士は連絡を取らない。Claude CodeのSubagents、GitHub Copilotの/fleet、OpenAI Codexのサブエージェントはいずれもこの形。パターンBでは、ワーカー同士が直接メッセージをやり取りし、依存関係つきの共有タスクリストを見ながら自律的に進捗を調整する。これはClaude CodeのAgent Teams(実験的機能)だけが持つ仕組み。</title>
+          <defs>
+            <marker id="cmp-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <text class="label label--muted" x="20" y="12" text-anchor="start">パターンA　報告するだけ(3ツール共通)</text>
+          <rect class="node" x="20" y="20" width="140" height="140" rx="8"/>
+          <text class="label" x="90" y="84" text-anchor="middle">呼び出し元</text>
+          <text class="label label--muted" x="90" y="102" text-anchor="middle">結果を受け取る</text>
+          <rect class="node" x="300" y="20" width="160" height="60" rx="8"/>
+          <text class="label" x="380" y="55" text-anchor="middle">ワーカー</text>
+          <rect class="node" x="300" y="100" width="160" height="60" rx="8"/>
+          <text class="label" x="380" y="135" text-anchor="middle">ワーカー</text>
+          <path class="arrow" d="M300 50 L160 60" marker-end="url(#cmp-arrow)"/>
+          <path class="arrow" d="M300 130 L160 120" marker-end="url(#cmp-arrow)"/>
+
+          <text class="label label--muted" x="40" y="212" text-anchor="start">パターンB　直接やり取りする(Agent Teamsのみ)</text>
+          <rect class="node node--accent" x="40" y="220" width="140" height="60" rx="8"/>
+          <text class="label" x="110" y="255" text-anchor="middle">ワーカー</text>
+          <rect class="node node--accent" x="240" y="220" width="140" height="60" rx="8"/>
+          <text class="label" x="310" y="255" text-anchor="middle">ワーカー</text>
+          <rect class="node node--accent" x="440" y="220" width="140" height="60" rx="8"/>
+          <text class="label" x="510" y="255" text-anchor="middle">ワーカー</text>
+          <path class="arrow" d="M180 250 L240 250" marker-start="url(#cmp-arrow)" marker-end="url(#cmp-arrow)"/>
+          <path class="arrow" d="M380 250 L440 250" marker-start="url(#cmp-arrow)" marker-end="url(#cmp-arrow)"/>
+          <rect class="node node--accent" x="40" y="320" width="540" height="56" rx="8"/>
+          <text class="label" x="310" y="344" text-anchor="middle">共有タスクリスト</text>
+          <text class="label label--muted" x="310" y="361" text-anchor="middle">依存関係を管理</text>
+          <path class="arrow" d="M110 280 L110 320" marker-end="url(#cmp-arrow)"/>
+          <path class="arrow" d="M310 280 L310 320" marker-end="url(#cmp-arrow)"/>
+          <path class="arrow" d="M510 280 L510 320" marker-end="url(#cmp-arrow)"/>
+        </svg>
+        <figcaption>図1: 並列エージェントの2つのパターン。3ツールとも基本は報告するだけの形で、エージェント同士が直接やり取りする仕組みを持つのはClaude CodeのAgent Teams(実験的機能)だけになる。</figcaption>
+      </figure>
+
+      <p>
+        パターンAは、ワーカーが自分のタスクを黙々とこなし、終わったら呼び出し元に結果を返すだけの形だ。ワーカー同士が互いの存在を
+        意識することはない。Claude CodeのSubagents、GitHub Copilotの <code>/fleet</code>、OpenAI Codexのサブエージェントは、
+        いずれもこの形に当てはまる。
+      </p>
+      <p>
+        パターンBは、ワーカー同士が直接メッセージを送り合い、依存関係つきの共有タスクリストを見ながら自律的に進捗を調整する形だ。
+        これができるのは、3ツールの中でClaude Codeの「Agent Teams」だけになる。
+      </p>
+      <p>
+        ただしAgent Teamsには注意点がある。公式ドキュメントを見る限り、これは実験的機能という位置づけで既定では無効になっている。
+        有効にするには環境変数 <code>CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1</code> を設定する必要があり、対話セッションでしか
+        使えない(ヘッドレスの <code>-p</code> モードでは動かない)。トークン消費も通常のSubagentsより重くなり、公式が推奨する
+        チーム規模は3〜5人程度としている。
+      </p>
+
+      <h2>Claude Code、実は2つの並列化がある</h2>
+      <p>
+        混同されがちだが、Claude Codeには性質の違う2つの並列機能が存在する。
+      </p>
+      <p>
+        Subagentsはメインセッションから呼び出す軽量な仕組みで、ワーカーは自分のタスクを終えたら結果を呼び出し元に返すだけになる。
+        トークン消費が比較的軽く、日常的に使うならこちらが基本になる。
+      </p>
+      <p>
+        Agent Teamsは前述の通り、ワーカー同士がメールボックスのような仕組みで直接メッセージをやり取りし、共有タスクリストで
+        依存関係を追いながら自律的に協調する。実験的機能で重量級な分、ワーカー間で議論や調整が要る複雑なタスクに向いている。
+      </p>
+      <p>
+        モデルの文脈でもう1つ確認できたことがある。Opus 5やSonnet 5をはじめとする最新世代のモデルは、ベータ扱いのヘッダーなしで
+        最大100万トークンのコンテキストウィンドウを標準搭載している(Sonnet 4.5やHaikuは20万トークンのまま)。ワーカーごとに
+        この大きな窓を持てることが、1人のワーカーに任せられるタスクの規模を押し上げている。
+      </p>
+
+      <h2>GitHub Copilot、計画を立ててから割る</h2>
+      <p>
+        GitHub Copilotの <code>/fleet</code> は、Agent Teamsとはだいぶ性格が違う。まず実装計画を1つ立て、その計画が複数の
+        独立したサブタスクに分けられるかどうかをオーケストレーターが判断し、分けられる部分だけを並列で実行する。
+      </p>
+      <p>
+        各サブエージェントは自分専用のコンテキストウィンドウを持つ一方、ファイルシステムは共有していて、サブエージェント同士が
+        直接会話する仕組みは無い。既定では低コストなモデルが使われるが、変更もできる。
+      </p>
+      <p>
+        計画をまず立ててから機械的に割るという発想なので、最初にタスクの依存関係を人間側できちんと整理しておくほど効果が
+        出やすい構造だと言えそうだ。
+      </p>
+
+      <h2>OpenAI Codex、投げて放っておける非同期型</h2>
+      <p>
+        OpenAI Codexのクラウド実行は、他の2つとは実行環境そのものが違う。ローカルのターミナルではなく、隔離されたクラウドの
+        サンドボックスでタスクが進み、完了すると結果を確認してPRを開く、という投げて放っておく運用が前提になっている。
+      </p>
+      <p>
+        並列で動かせるスレッド数は <code>agents.max_concurrent_threads_per_session</code> という設定項目で決まる。
+        ブログ記事では「最大8並列」のように紹介されているのをよく見かけたが、公式ドキュメントを確認する限りこれは固定値ではなく、
+        設定で変更できる上限値だった。サブエージェント同士はここでも独立していて、互いに通信せず、結果は最後にまとめて統合される。
+      </p>
+      <p>
+        モデルは <code>gpt-5.6</code> 系列が使われ、速度を優先した <code>gpt-5.6-terra</code> や、反復作業向けの
+        <code>gpt-5.6-luna</code> といった派生が用意されている。推論の強さ(<code>model_reasoning_effort</code>)も調整できる。
+        処理速度そのものを表す具体的な数値は、今回参照した公式ドキュメントの範囲では見つけられなかった。
+      </p>
+
+      <h2>Git worktreeという裏方</h2>
+      <p>
+        3ツールとも、ドキュメントのどこかに「Git worktree」という単語が出てくる。1つの <code>.git</code> を共有しながら、
+        ブランチごとに別々の作業ディレクトリを用意できるGitの機能で、複数のエージェントが同じリポジトリを同時にいじっても
+        ファイルの取り合いにならないようにする裏方の役回りだ。
+      </p>
+      <p>
+        ここで注意したいのは、worktreeは各ツールが独自に発明した並列機構ではなく、Gitそのものの一般的な機能だという点だ。
+        Claude Codeのドキュメントでは、Agent Teamsのような自動調整を使わずに複数セッションを手動で並走させる手段として
+        worktreeが紹介されている。ツールの売りである並列機能と、その下で使われている土台部分は分けて見た方が実態に近い。
+      </p>
+
+      <h2>仕組みを並べて見る</h2>
+      <p>
+        確認できた範囲を表にまとめると次のようになる。公式ドキュメントで裏が取れなかった項目、たとえば処理速度や
+        コンテキストウィンドウの具体的なサイズは、推測で埋めずにそもそも載せていない。
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>観点</th>
+              <th>Claude Code</th>
+              <th>GitHub Copilot</th>
+              <th>OpenAI Codex</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>並列の仕組み</td>
+              <td>Subagents(報告型)とAgent Teams(会話型、実験的機能)の2種類</td>
+              <td><code>/fleet</code> で実装計画をサブタスクに分割</td>
+              <td>サブエージェント(スレッド)。並列数は設定で上限を指定</td>
+            </tr>
+            <tr>
+              <td>エージェント間の通信</td>
+              <td>Subagentsは無し。Agent Teamsは直接メッセージ+共有タスクリスト</td>
+              <td>無し(ファイルシステムのみ共有)</td>
+              <td>無し</td>
+            </tr>
+            <tr>
+              <td>実行環境</td>
+              <td>ローカルセッション内</td>
+              <td>IDEまたはクラウド</td>
+              <td>クラウドのサンドボックス</td>
+            </tr>
+            <tr>
+              <td>既定モデル</td>
+              <td>呼び出し元セッションのモデルを継承</td>
+              <td>低コストモデルが既定(変更可)</td>
+              <td>gpt-5.6系(用途別の派生あり)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>見えてきた設計の違い</h2>
+      <p>
+        当初の疑問は「どのツールが一番速いか」だったが、公式ドキュメントを読み比べていくと、それよりも
+        「エージェントに何を任せたいか」という設計思想の違いの方がはっきり見えてきた。
+      </p>
+      <p>
+        ワーカー同士が議論しながら進めてほしいなら、今のところ3つの中で唯一その形を持っているのはClaude CodeのAgent Teamsになる。
+        ただし実験的機能で環境変数を立てる必要があり、トークンも余計に食う。すでにタスクの分け方が決まっていて、それを機械的に
+        高速化したいだけならGitHub Copilotの <code>/fleet</code> が向いていそうだし、タスクを投げてしばらく他の作業をして、
+        後からまとめてPRを見返したいならOpenAI Codexのクラウド実行が合っている。日常的にちょっとした調べ物やサブタスクを
+        1つ切り出したいだけなら、Claude CodeのSubagentsのような軽量な報告型で十分なことも多い。
+      </p>
+      <p>
+        ネット上の比較記事に出てくる具体的な速度や並列数の数字は、計測条件も情報源もまちまちで、鵜呑みにするのは危ういと感じた。
+        仕組みそのものを公式ドキュメントで確認してから選ぶ方が、結局は近道になる。
+      </p>
+
+      <h2>参考</h2>
+      <ul>
+        <li><a href="https://code.claude.com/docs/en/agent-teams">Claude Code公式ドキュメント「Agent Teams」</a></li>
+        <li><a href="https://code.claude.com/docs/en/sub-agents">Claude Code公式ドキュメント「Subagents」</a></li>
+        <li><a href="https://docs.github.com/en/copilot/concepts/agents/copilot-cli/fleet">GitHub Copilot公式ドキュメント「Fleet」</a></li>
+        <li><a href="https://developers.openai.com/codex/subagents">OpenAI Codex公式ドキュメント「Subagents」</a></li>
+        <li><a href="https://developers.openai.com/codex/cloud">OpenAI Codex公式ドキュメント「Cloud」</a></li>
+        <li><a href="https://platform.claude.com/docs/en/build-with-claude/context-windows">Claude API公式ドキュメント「Context windows」</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
