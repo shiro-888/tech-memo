@@ -180,6 +180,32 @@ h2 {
   margin-top: 2.25rem;
 }
 
+/* ─────── skip link（キーボードで本文へ飛ぶ） ───────
+   普段は画面外に置き、Tab でフォーカスが来たときだけ現れる。 */
+.skip-link {
+  position: absolute;
+  left: 0.5rem;
+  top: -3rem;
+  z-index: 10;
+  padding: 0.5rem 0.9rem;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+
+.skip-link:focus {
+  top: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skip-link {
+    transition: none;
+  }
+}
+
 /* ─────── site notice（AI生成の注意書き） ─────── */
 .site-notice {
   margin: 0 0 1.75rem;
@@ -190,6 +216,14 @@ h2 {
   background: var(--color-bg-soft);
   color: var(--color-muted);
   font-size: 0.9rem;
+}
+
+/* 記事ページ用の控えめ版。検索から直接記事に来た読者にも表示する。 */
+.site-notice--compact {
+  margin: 0 0 2rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.82rem;
+  line-height: 1.6;
 }
 
 /* ─────── category filter chips（トップ） ─────── */
@@ -400,6 +434,17 @@ h2 {
   white-space: nowrap;
 }
 
+/* 記事ページのバッジは同カテゴリの一覧へのリンクになっている。
+   見た目はバッジのままにしたいので、リンクの装飾は打ち消す。 */
+.badge-link {
+  display: inline-flex;
+  text-decoration: none;
+}
+
+.badge-link:hover .badge {
+  filter: brightness(1.1);
+}
+
 .badge--web      { background: var(--cat-web); }
 .badge--security { background: var(--cat-security); }
 .badge--tools    { background: var(--cat-tools); }
@@ -421,6 +466,48 @@ h2 {
 
 article :is(p, ul, ol) {
   margin: 1rem 0;
+}
+
+/* ─────── 記事内のテーブル ───────
+   既存3記事はファイル内の <style> で独自のテーブルCSSを持つ。ここは要素セレクタ
+   なので、相手が指定しているプロパティ（width / min-width / padding 等）では
+   詳細度で負けて既存の見た目を壊さない。
+   ただし display は既存側が指定していないため、ここで display:block を書くと
+   そのまま効いてしまい table-layout:fixed が無効になる。テーブルは table のまま
+   にして、横溢れは下の .table-wrap（既存記事の *-table-wrap と同じ考え方）で扱う。 */
+article table {
+  width: 100%;
+  margin: 1.5rem 0;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+/* 幅の広い表はこれで包む。狭い画面では表だけが横スクロールする。 */
+.table-wrap {
+  overflow-x: auto;
+  margin: 1.5rem 0;
+}
+
+.table-wrap table {
+  margin: 0;
+}
+
+article th,
+article td {
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+article th {
+  background: var(--color-bg-soft);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+article tbody tr:nth-child(even) {
+  background: var(--color-bg-soft);
 }
 
 /* ─────── code ─────── */
@@ -530,4 +617,57 @@ blockquote :is(p):last-child  { margin-bottom: 0; }
   display: flex;
   justify-content: center;
   margin: 1.5rem 0;
+}
+
+/* ─────── 印刷 ───────
+   技術ノートは印刷や PDF 化されることがある。ナビゲーション類は紙面では
+   意味を持たないので落とし、リンク先の URL は本文の後ろに展開する。 */
+@media print {
+  .skip-link,
+  .site-header,
+  .site-footer,
+  .category-filter,
+  .note-search,
+  .note-list__status,
+  .back-link {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+    font-size: 11pt;
+  }
+
+  .container {
+    max-width: none;
+    padding: 0;
+  }
+
+  /* 画面では読めていた紙面外のリンク先を、本文の後ろに出す */
+  article a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    word-break: break-all;
+  }
+
+  /* 図・コード・表がページ途中で割れると読めなくなる */
+  .diagram,
+  pre,
+  article table {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  h1, h2, h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .site-notice,
+  pre,
+  .diagram {
+    border: 1px solid #ccc;
+    background: transparent;
+  }
 }

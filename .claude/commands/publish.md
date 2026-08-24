@@ -39,6 +39,8 @@ argument-hint: <slug>（notes/_drafts/<slug>.html の slug）
    - カードの内容は記事の `<head>` のメタタグから複製する:
      - `data-category="..."` ← `<meta name="article:category">`
      - `<span class="badge badge--...">カテゴリ表示名</span>` ← 同 category
+       （※ トップのカードのバッジはリンクにしない。記事ページ側のバッジだけが
+       `.badge-link` で `../../index.html?cat=<category>` へのリンクになる）
        （表示名: web=Web開発, security=セキュリティ, tools=ツール, design=設計, infra=インフラ, ai=AI, misc=その他）
      - `<time datetime="...">YYYY-MM-DD</time>` ← 公開日
      - `<h2 class="note-card__title"><a href="...">タイトル</a></h2>`

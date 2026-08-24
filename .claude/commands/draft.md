@@ -34,6 +34,10 @@ argument-hint: <トピック（書いてほしい題材）>
      - `<meta name="article:summary">`: トップカードに出る紹介文。80〜120文字目安。
      - `<meta name="article:tags">`: 任意。カンマ区切り（例: `pre-commit,gitleaks,CI`）。
      - 記事冒頭の `.note-meta` 内の `badge badge--<category>` クラスも `article:category` と揃える。
+       バッジは同カテゴリの一覧へのリンクになっているので、`href` の `?cat=` も揃える:
+       `<a class="badge-link" href="../../index.html?cat=<category>"><span class="badge badge--<category>">表示名</span></a>`
+     - テンプレートに含まれる `.site-notice--compact`（AI生成の注意書き）と
+       `.skip-link` はそのまま残す。全ページに入っている必要がある。
    - **AGENTS.md の「公開前の必須チェック」を厳守**する:
      - 個人情報・勤務先固有情報・同僚名・未公開の業務情報を書かない。
      - 認証情報・APIキー・秘密鍵・`.env` の実値を書かない。

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ページが見つかりません — tech-memo</title>
+  <meta name="description" content="お探しのページは見つかりませんでした。">
+  <!--
+    404 は任意の深さの URL に対して配信されるため、相対パスだと解決できない。
+    このファイルだけはルート絶対パス（/tech-memo/...）を使う。
+  -->
+  <link rel="stylesheet" href="/tech-memo/styles/site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">本文へスキップ</a>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="/tech-memo/">tech-memo</a>
+      <p class="site-tagline">学んだことを書き留める技術ノート</p>
+    </div>
+  </header>
+
+  <main class="container" id="main">
+    <h1>ページが見つかりません</h1>
+    <p>
+      お探しのページは見つかりませんでした。URL が変わったか、削除された可能性があります。
+    </p>
+    <p>
+      <a href="/tech-memo/">ノート一覧から探す</a>
+    </p>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
