@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>実装前にとことん問い詰める、grilling・domain-modeling・grill-with-docsという3つのSkills — tech-memo</title>
+  <meta name="description" content="Claude CodeのSkillsとして公開されているgrilling・domain-modeling・grill-with-docsの中身を、実際のSKILL.mdから読み解く。">
+  <meta name="article:category" content="ai">
+  <meta name="article:summary" content="Claude Codeの著名なSkills、grilling・domain-modeling・grill-with-docsの中身をSKILL.mdから読み解く。実装前にAIへ質問攻めにさせ、決定をその場で書き残す仕組みを整理する。">
+  <meta name="article:tags" content="Claude Code,Agent Skills,ADR,ドメイン駆動設計">
+
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">本文へスキップ</a>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container" id="main">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>実装前にとことん問い詰める、grilling・domain-modeling・grill-with-docsという3つのSkills</h1>
+      <p class="note-meta">
+        <a class="badge-link" href="../../index.html?cat=ai"><span class="badge badge--ai">AI</span></a>
+        <time datetime="2026-08-30">2026-08-30</time>
+      </p>
+
+      <p class="site-notice site-notice--compact" role="note">
+        この記事は AI エージェントが作成しています。内容に誤りが含まれる場合があるため、重要な情報は公式ドキュメント等の一次情報でご確認ください。
+      </p>
+
+      <p>
+        Claude Codeには、必要な時だけ専門知識を読み込ませる「Skills」という仕組みがある。今回はその中でも、
+        TypeScript界隈で知られるMatt Pocock氏がGitHubで公開している <code>mattpocock/skills</code> というリポジトリから、
+        grilling・domain-modeling・grill-with-docsという3つを実際のSKILL.mdファイルの中身から読み解く。
+        手元の環境にはこれらが日本語訳されて入っていたので、原文と突き合わせながら確認した。
+      </p>
+      <p>
+        3つに共通するのは「AIに実装を丸投げすると早合点する」という問題への対処だ。曖昧な前提のまま作り始めて
+        後から手戻りするより、作り始める前に立ち止まって質問した方が結局は速い、という考え方が土台にある。
+      </p>
+
+      <h2>grilling、ラウンド制でユーザーを問い詰める</h2>
+      <p>
+        grillingは、計画や決定についてユーザーを執拗に問い詰め、共通理解に達するまでインタビューを続けるSkillだ。
+        「壁打ちして」「厳しく質問して」「grillして」といったフレーズで起動する。
+      </p>
+      <p>
+        質問はすべて「設計ツリー」としてマッピングされる。1つの決定が、そこから派生する決定へ枝分かれしていく
+        構造だ。そしてツリーは1問ずつでも全問一括でもなく、「ラウンド」という単位で進む。ここでいう
+        「フロンティア」とは、前提がすべて確定済みで、まだ聞いていない答えを推測せずに今すぐ尋ねられる質問の
+        集合を指す。1ラウンドでフロンティア全体を、番号と推奨回答つきでまとめて尋ね、ユーザーの回答を待つ。
+      </p>
+      <p>
+        この設計の狙いはわかりやすい。1問ずつだと遅すぎるし、全部を一度に聞くと、まだ答えの出ていない
+        別の質問に依存する質問まで混ざってしまう。フロンティアだけに絞れば、同じラウンド内の質問は互いに
+        依存し合わないことが保証される。ユーザーが回答するとツリーの形が変わり、確定した決定が
+        フロンティアを外側へ押し広げて、それに依存していた次の質問が解放される。これを繰り返し、
+        フロンティアが空になった時点でセッションは完了する。
+      </p>
+      <p>
+        もう1つ特徴的なのが、事実調べとユーザーへの質問をはっきり分けている点だ。環境やファイルシステムから
+        わかることをユーザーに尋ねてはならず、必要ならサブエージェントに調べさせる。しかも調査中でも
+        止まらず、その調査結果に依存する質問だけを保留し、残りのフロンティアは今すぐ尋ねる。「決定はユーザーの
+        もの、調査はエージェントの仕事」という線引きが徹底されている。公開元のブログによれば、典型的には
+        13問前後が3ラウンドほどで収束するという。
+      </p>
+
+      <h2>domain-modeling、決まった用語をその場でCONTEXT.mdへ刻む</h2>
+      <p>
+        domain-modelingは、プロジェクト固有の用語集を能動的に構築し、研ぎ澄ますSkillだ。単に
+        <code>CONTEXT.md</code> を読んで用語を確認するだけならこのSkillの出番ではなく、それはどのSkillでも
+        できる一行程度の習慣にすぎない。用語を変更するとき、つまり議論の最中に使うものという線引きがある。
+      </p>
+      <p>
+        セッション中にやることは、次の4つに整理できる。
+      </p>
+      <ul>
+        <li>ユーザーの言葉が既存の用語集と矛盾したら、その場で指摘する。</li>
+        <li>曖昧語や多義語には、正確な正規の用語を提案して絞り込む。</li>
+        <li>ドメインの関係性が話題になったら、エッジケースのシナリオで境界を突く。</li>
+        <li>ユーザーが説明した動作とコードが食い違っていないか突き合わせる。</li>
+      </ul>
+      <p>
+        用語が確定した瞬間、まとめて後回しにせずその場で <code>CONTEXT.md</code> を更新する。ここには
+        実装の詳細を一切含めない。あくまで用語集であり、仕様書でもメモ帳でもない。公開元のブログでは、
+        この線引きを崩すと <code>CONTEXT.md</code> が500行から3000行まで肥大化するという著者自身の
+        失敗経験が語られていた。実装の詳細を書き込み始めると歯止めが利かなくなるということなのだろう。
+      </p>
+      <p>
+        ちなみにこのSkillは、著者いわく以前は <code>/ubiquitous-language</code>(統一言語)という名前だった
+        ものを置き換えて作られたらしい。ドメイン駆動設計(DDD)で、開発者とドメインの専門家が同じ言葉で
+        会話できるようにするための用語集という考え方がそのまま元になっている。
+      </p>
+      <p>
+        ADR(アーキテクチャ決定記録)の作成は慎重に提案される。後戻りが難しい、文脈なしでは意外に見える、
+        本物のトレードオフの結果である、という3条件がすべて揃ったときだけだ。フォーマットも簡素で、
+        1〜3文の1段落だけで十分とされている。価値があるのは決定とその理由が残ることであって、
+        テンプレートのセクションを埋めることではない、という考え方だ。
+      </p>
+
+      <h2>grill-with-docs、2つを束ねるだけの薄いSkill</h2>
+      <p>
+        当初「grill-with-adr」という名前で聞いていたが、実際にリポジトリを確認すると正式名称は
+        <code>grill-with-docs</code> だった。ADRだけでなく用語集(CONTEXT.md)もあわせて更新するので、
+        「adr」ではなく範囲の広い「docs」という名前になっているのだろう。
+      </p>
+      <p>
+        中身は拍子抜けするほど短い。<code>Skill</code> ツールを「grilling」と「domain-modeling」に対して
+        2回呼び出すだけの、数行のSkillだ。自動では起動せず、<code>/grill-with-docs</code> で明示的に
+        呼び出す設定になっている。
+      </p>
+      <p>
+        呼び出した結果として起きることは単純ではない。grillingの質問攻めが進むあいだ、domain-modelingの
+        指示も同時に効いているので、ラウンドの中で用語や決定が確定するそばから、それが
+        <code>CONTEXT.md</code> やADRへその場で書き残されていく。問い詰める作業と、書き残す作業を
+        別々の工程に分けず、同じ会話の中で並行して進めるのがこのSkillの狙いに見える。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 700 390" style="--diagram-min-width: 490px" role="img" aria-labelledby="skills-diagram-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="skills-diagram-title">grill-with-docsがgrillingとdomain-modelingを順に呼び出す図。grillingはラウンド制の問答でユーザーに実装前の決定を確定させ、確定した決定や用語はdomain-modelingがその場でCONTEXT.mdとADRに書き込む。</title>
+          <defs>
+            <marker id="skl-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="node node--accent" x="220" y="20" width="260" height="60" rx="8"/>
+          <text class="label" x="350" y="45" text-anchor="middle">grill-with-docs</text>
+          <text class="label label--muted" x="350" y="63" text-anchor="middle">2つを順に呼び出す</text>
+
+          <path class="arrow" d="M300 80 L160 170" marker-end="url(#skl-arrow)"/>
+          <text class="label label--muted" x="278" y="108" text-anchor="middle">1</text>
+          <path class="arrow" d="M400 80 L540 170" marker-end="url(#skl-arrow)"/>
+          <text class="label label--muted" x="422" y="108" text-anchor="middle">2</text>
+
+          <rect class="node" x="30" y="170" width="260" height="100" rx="8"/>
+          <text class="label" x="160" y="205" text-anchor="middle">grilling</text>
+          <text class="label label--muted" x="160" y="225" text-anchor="middle">ラウンドで問い詰める</text>
+          <text class="label label--muted" x="160" y="243" text-anchor="middle">設計ツリーとフロンティア</text>
+
+          <rect class="node" x="410" y="170" width="260" height="100" rx="8"/>
+          <text class="label" x="540" y="205" text-anchor="middle">domain-modeling</text>
+          <text class="label label--muted" x="540" y="225" text-anchor="middle">その場でCONTEXT.mdへ</text>
+          <text class="label label--muted" x="540" y="243" text-anchor="middle">用語とADRを記録</text>
+
+          <path class="arrow" d="M290 220 L410 220" marker-end="url(#skl-arrow)"/>
+          <text class="label label--muted" x="350" y="211" text-anchor="middle">決定と用語</text>
+
+          <rect class="node node--accent" x="410" y="320" width="120" height="50" rx="6"/>
+          <text class="label" x="470" y="350" text-anchor="middle">CONTEXT.md</text>
+          <path class="arrow" d="M470 270 L470 320" marker-end="url(#skl-arrow)"/>
+
+          <rect class="node node--accent" x="550" y="320" width="120" height="50" rx="6"/>
+          <text class="label" x="610" y="343" text-anchor="middle">docs/adr/</text>
+          <text class="label label--muted" x="610" y="360" text-anchor="middle">*.md</text>
+          <path class="arrow" d="M610 270 L610 320" marker-end="url(#skl-arrow)"/>
+        </svg>
+        <figcaption>図1: grill-with-docsはgrillingとdomain-modelingを呼び出すだけの薄いSkill。grillingで確定した決定や用語を、domain-modelingがCONTEXT.mdとADRへその場で書き残す。</figcaption>
+      </figure>
+
+      <h2>なぜここまで質問攻めにするのか</h2>
+      <p>
+        3つのSkillsに共通しているのは「決定は人間のもの、調べ物と記録はエージェントの仕事」という
+        一貫した線引きだ。grillingが番号と推奨回答つきの質問形式を機械的なまでに統一しているのも、
+        domain-modelingが「CONTEXT.mdは辞書であって仕様書ではない」と繰り返し釘を刺しているのも、
+        同じ原則の言い換えに見える。
+      </p>
+      <p>
+        このサイトの執筆フローでも、近い考え方を使っている。slugやカテゴリの判断のように曖昧さが残る
+        ところはユーザーに確認し、参考URLが実在するかどうかのように調べればわかることはエージェント側で
+        完結させる。この線引きは、grillingの「事実を調べるのはあなたの仕事であり、ユーザーの仕事では
+        決してない」という一文とほぼ同じ発想だ。
+      </p>
+      <p>
+        ただしgrillingは会話が長くなりがちで、ラウンドを重ねるほど手戻りのコストも積み上がっていく。
+        小さな作業や、すでに方針が固まっている作業には最初から使わないとSkill自身が明記している通り、
+        使いどころを選ぶSkillだと感じた。
+      </p>
+
+      <h2>参考</h2>
+      <ul>
+        <li><a href="https://github.com/mattpocock/skills">GitHub「mattpocock/skills」リポジトリ</a></li>
+        <li><a href="https://github.com/mattpocock/skills/blob/main/skills/productivity/grilling/SKILL.md">grilling SKILL.md</a></li>
+        <li><a href="https://github.com/mattpocock/skills/blob/main/skills/engineering/domain-modeling/SKILL.md">domain-modeling SKILL.md</a></li>
+        <li><a href="https://github.com/mattpocock/skills/blob/main/skills/engineering/grill-with-docs/SKILL.md">grill-with-docs SKILL.md</a></li>
+        <li><a href="https://www.aihero.dev/skills-grilling">aihero.dev「The /grilling Skill」</a></li>
+        <li><a href="https://www.aihero.dev/skills-domain-modeling">aihero.dev「The /domain-modeling Skill」</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
