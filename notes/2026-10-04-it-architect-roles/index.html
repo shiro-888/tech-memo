@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ITエンジニアの「アーキテクト」という肩書き、整理してみる — tech-memo</title>
+  <meta name="description" content="IT業界で曖昧に使われがちな「アーキテクト」という肩書きを、対象範囲の違いやTOGAFのBDAT、日本の資格制度まで含めて整理する。">
+  <meta name="article:category" content="design">
+  <meta name="article:summary" content="IT業界で曖昧に使われがちな「アーキテクト」という肩書きを整理した。ソフトウェア・ソリューション・エンタープライズという対象範囲の違いから、資格制度まで見ていく。">
+  <meta name="article:tags" content="アーキテクト,エンタープライズアーキテクト,TOGAF,システムアーキテクト試験">
+
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">本文へスキップ</a>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container" id="main">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>ITエンジニアの「アーキテクト」という肩書き、整理してみる</h1>
+      <p class="note-meta">
+        <a class="badge-link" href="../../index.html?cat=design"><span class="badge badge--design">設計</span></a>
+        <time datetime="2026-10-04">2026-10-04</time>
+      </p>
+
+      <p class="site-notice site-notice--compact" role="note">
+        この記事は AI エージェントが作成しています。内容に誤りが含まれる場合があるため、重要な情報は公式ドキュメント等の一次情報でご確認ください。
+      </p>
+
+      <p>
+        技術ノートを書いていると「アーキテクト」という肩書きをよく見かける。ソフトウェアアーキテクト、ソリューション
+        アーキテクト、クラウドアーキテクト、エンタープライズアーキテクト。似たような名前が並ぶわりに、それぞれが
+        具体的に何をする人なのかをちゃんと説明したことがなかった。名刺に書かれている肩書きとしては格好いいが、中身を
+        聞かれると答えに詰まる人も多い気がする。
+      </p>
+      <p>
+        そもそも日本語圏では会社ごとに肩書きの使い方がバラバラで、同じ「アーキテクト」でもやっていることが全然違う、
+        という話もよく聞く。今回は、各種アーキテクトの違い、設計をどう捉えるかという物差し、そして日本の資格制度まで、
+        できる範囲で整理してみる。
+      </p>
+
+      <h2>そもそもアーキテクトとは何をする人か</h2>
+      <p>
+        アーキテクト（architect）はもともと建築の世界の言葉で、建物の構造全体を設計する人を指す。レンガを積む職人
+        ではなく、その建物が何階建てで、どこに柱を立て、どんな動線にするかを決める役割だ。IT業界でもこの比喩が
+        そのまま持ち込まれていて、コードを1行ずつ書く担当者というより、システム全体の構造を決める担当者という
+        位置づけになる。
+      </p>
+      <p>
+        具体的には、使う技術やミドルウェアの選定、コンポーネント同士の境界線の引き方、性能や可用性・セキュリティと
+        いった非機能要件の定義、そして現場のエンジニアと経営層やビジネス側との間の調整が主な仕事になる。コードを
+        書かないわけではないが、個々の実装よりも「全体がどうあるべきか」を決めることに比重が置かれている。
+      </p>
+
+      <h2>一口にアーキテクトと言っても、見ている範囲が違う</h2>
+      <p>
+        厄介なのは、同じ「アーキテクト」という肩書きでも、見ている範囲の広さがまったく違うことだ。大きく分けると
+        次の3段階がある。
+      </p>
+      <p>
+        一番狭いのはソフトウェアアーキテクトで、単一のシステムやアプリケーションの内部設計を担当する。コンポーネント
+        構成やAPI設計、データベース設計まで踏み込み、開発チームに一番近い位置にいる技術リードに近い。
+      </p>
+      <p>
+        その1段上がソリューションアーキテクトだ。複数のシステムをまたぐ導入案件を担当し、ビジネス側の要件を技術
+        要素に落とし込む役回りになる。SIerやベンダーが提案フェーズで出してくる「ソリューションアーキテクト」は
+        だいたいこのイメージだ。
+      </p>
+      <p>
+        さらにもう1段上がエンタープライズアーキテクトで、会社全体のIT戦略や技術標準、長期的な投資判断を担う。
+        個別のシステムというより、組織全体として技術をどう使っていくかという経営に近い目線の仕事になる。
+      </p>
+      <p>
+        ここにクラウドアーキテクトという専門職も絡んでくる。これは「見ている範囲」の軸とは別で、AWSやAzureと
+        いった特定のクラウド基盤に特化した専門性を指す。ソフトウェアアーキテクトがクラウドアーキテクトを兼ねる
+        こともあれば、エンタープライズアーキテクトがクラウド戦略まで含めて見ることもあり、階層というより横串の
+        専門分野と捉えたほうがしっくりくる。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 620 300" style="--diagram-min-width: 420px" role="img" aria-labelledby="architect-scope-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="architect-scope-title">アーキテクトの肩書きが見ている範囲を示す入れ子の図。一番内側がソフトウェアアーキテクトで単一システムを、その外側のソリューションアーキテクトが複数システムをまたぐ導入案件を、一番外側のエンタープライズアーキテクトが組織全体のIT戦略を見ている。</title>
+          <rect class="node" x="20" y="20" width="580" height="260" rx="10"/>
+          <text class="label" x="310" y="48" text-anchor="middle">エンタープライズアーキテクト</text>
+          <text class="label label--muted" x="310" y="68" text-anchor="middle">組織全体のIT戦略・技術標準</text>
+
+          <rect class="node node--accent" x="70" y="90" width="480" height="160" rx="10"/>
+          <text class="label" x="310" y="116" text-anchor="middle">ソリューションアーキテクト</text>
+          <text class="label label--muted" x="310" y="136" text-anchor="middle">複数システムをまたぐ導入案件</text>
+
+          <rect class="node" x="130" y="160" width="360" height="70" rx="10"/>
+          <text class="label" x="310" y="190" text-anchor="middle">ソフトウェアアーキテクト</text>
+          <text class="label label--muted" x="310" y="210" text-anchor="middle">単一システムの内部設計</text>
+        </svg>
+        <figcaption>図1: アーキテクトの肩書きが見ている範囲のイメージ。内側ほど対象が狭く実装に近く、外側ほど対象が広く経営に近づく。</figcaption>
+      </figure>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>役職</th>
+              <th>対象範囲</th>
+              <th>主な関心事</th>
+              <th>典型的な位置づけ</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>ソフトウェアアーキテクト</td>
+              <td>単一システム・アプリケーション</td>
+              <td>コンポーネント構成、API設計</td>
+              <td>開発チームに近い技術リード</td>
+            </tr>
+            <tr>
+              <td>ソリューションアーキテクト</td>
+              <td>複数システムをまたぐ導入案件</td>
+              <td>ビジネス要件の技術への落とし込み</td>
+              <td>提案フェーズで活躍することが多い</td>
+            </tr>
+            <tr>
+              <td>エンタープライズアーキテクト</td>
+              <td>組織全体のIT戦略</td>
+              <td>技術標準、投資判断、長期ロードマップ</td>
+              <td>経営層に近いポジション</td>
+            </tr>
+            <tr>
+              <td>クラウドアーキテクト</td>
+              <td>特定クラウド基盤上の設計</td>
+              <td>コスト最適化、可用性、クラウド特有のサービス活用</td>
+              <td>上記いずれの階層とも兼務しうる専門分野</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>TOGAFのBDATという物差し</h2>
+      <p>
+        「アーキテクチャ」という言葉自体、何を指しているのか曖昧になりがちだ。この整理によく使われるのが、
+        エンタープライズアーキテクチャの代表的なフレームワークであるTOGAFが示す4つの観点、通称BDAT（Business・
+        Data・Application・Technology）だ。
+      </p>
+      <p>
+        ビジネスアーキテクチャは組織の戦略やプロセス、データアーキテクチャは扱うデータの構造や管理方法、
+        アプリケーションアーキテクチャはその上で動くアプリケーション群、テクノロジアーキテクチャはそれを支える
+        インフラやプラットフォームを指す。ビジネス側の要求が上から下へ具体化されていき、最終的にインフラの
+        技術選定に落ちてくる、という流れになっている。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 620 280" style="--diagram-min-width: 420px" role="img" aria-labelledby="togaf-bdat-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="togaf-bdat-title">TOGAFが示す4つのアーキテクチャ領域を上から順に示す図。ビジネスアーキテクチャ、データアーキテクチャ、アプリケーションアーキテクチャ、テクノロジアーキテクチャの順に並び、ビジネス側の要求が上から下へ具体化されていくことを矢印で示す。</title>
+          <defs>
+            <marker id="bdat-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="node node--accent" x="40" y="15" width="460" height="52" rx="6"/>
+          <text class="label" x="270" y="38" text-anchor="middle">ビジネスアーキテクチャ</text>
+          <text class="label label--muted" x="270" y="56" text-anchor="middle">組織の戦略・プロセス</text>
+
+          <rect class="node" x="40" y="85" width="460" height="52" rx="6"/>
+          <text class="label" x="270" y="108" text-anchor="middle">データアーキテクチャ</text>
+          <text class="label label--muted" x="270" y="126" text-anchor="middle">データの構造・管理方法</text>
+
+          <rect class="node" x="40" y="155" width="460" height="52" rx="6"/>
+          <text class="label" x="270" y="178" text-anchor="middle">アプリケーションアーキテクチャ</text>
+          <text class="label label--muted" x="270" y="196" text-anchor="middle">動作するアプリケーション群</text>
+
+          <rect class="node" x="40" y="225" width="460" height="52" rx="6"/>
+          <text class="label" x="270" y="248" text-anchor="middle">テクノロジアーキテクチャ</text>
+          <text class="label label--muted" x="270" y="266" text-anchor="middle">インフラ・プラットフォーム</text>
+
+          <path class="arrow" d="M540 40 L540 255" marker-end="url(#bdat-arrow)"/>
+          <text class="label label--muted" x="555" y="150" text-anchor="start" transform="rotate(90 555 150)">要求を具体化</text>
+        </svg>
+        <figcaption>図2: TOGAFが示す4つのアーキテクチャ領域（BDAT）。ビジネス側の要求が上から下へ具体化され、最終的にインフラの技術選定に落ちてくる。</figcaption>
+      </figure>
+
+      <p>
+        この物差しに照らすと、さっきの3段階もわかりやすく位置づけられる。ソフトウェアアーキテクトは主に
+        アプリケーションとテクノロジの層、エンタープライズアーキテクトはビジネスとデータの上流から見ている、
+        という具合だ。全員が同じ「アーキテクト」でも見ている層がずれているから話が噛み合わない、というのは
+        実務でもよく聞く話だ。
+      </p>
+
+      <h2>日本の資格制度、システムアーキテクト試験</h2>
+      <p>
+        日本でアーキテクトに関連する国家資格といえば、IPA（情報処理推進機構）が実施するシステムアーキテクト試験が
+        代表格だ。この試験区分、実はかなり歴史が長い。1971年に始まった特種情報処理技術者試験を源流に、1994年に
+        アプリケーションエンジニア試験、2009年に現在のシステムアーキテクト試験という名前に変わってきた。IPAの
+        試験要綱によると、情報システムの要件を定義し、それを実現するアーキテクチャを設計して開発を主導する人材を
+        対象としている。
+      </p>
+      <p>
+        この試験制度は2026年度からCBT（コンピュータ上で受験する方式）へ全面移行し、科目名も午前I・IIや午後I・IIから
+        科目A-1・A-2、B-1・B-2という呼び方に変わる予定だという。ちょうど過渡期に差しかかっているタイミングなので、
+        これから受験を考える人は最新のIPA公式情報を確認したほうがいい。
+      </p>
+      <p>
+        国家資格以外では、AWS認定ソリューションアーキテクト（AssociateとProfessionalの2段階）のようなクラウド
+        ベンダー資格や、TOGAF自体の認定資格も実務ではよく名前が挙がる。日本語の資格と英語圏のベンダー資格、
+        どちらを取るべきかは目指すキャリアパス次第というのが正直なところだろう。
+      </p>
+
+      <h2>肩書きのゆるさを前提に話したほうがよさそう</h2>
+      <p>
+        ここまで整理してみて感じたのは、「アーキテクト」という肩書きは思った以上にゆるく使われているということだ。
+        会社によってはソフトウェアアーキテクトがエンタープライズアーキテクト相当の仕事をしていることもあれば、
+        逆に肩書きだけ立派でプロジェクトリーダーに近い仕事をしている人もいる。クラウド基盤を極めた人がソリューション
+        アーキテクトへ、そこからエンタープライズアーキテクトへとステップアップしていくのが王道のキャリアパスとされる
+        ことが多いが、これもあくまで傾向の話だ。
+      </p>
+      <p>
+        誰かの肩書きが「アーキテクト」だったときは、名刺の文字だけで判断せず、どの範囲の設計に責任を持っているのかを
+        一言聞いてみるのが確実だと思う。この記事自体も一般化した整理に過ぎないので、実際の職務内容は会社やチーム
+        ごとに確認してほしい。
+      </p>
+
+      <h2>参考</h2>
+      <ul>
+        <li><a href="https://www.ipa.go.jp/shiken/kubun/sa.html">IPA「システムアーキテクト試験」</a></li>
+        <li><a href="https://www.ipa.go.jp/shiken/about/enkaku.html">IPA「試験制度の沿革」</a></li>
+        <li><a href="https://www.ipa.go.jp/shiken/2026/ap_koudo_sc_yotei.html">IPA「令和8年度（2026年度）応用情報技術者試験、高度試験及び情報処理安全確保支援士試験の実施予定について」</a></li>
+        <li><a href="https://pubs.opengroup.org/togaf-standard/introduction/chap03.html">The Open Group「TOGAF Standard, Introduction — Core Concepts」</a></li>
+        <li><a href="https://aws.amazon.com/certification/certified-solutions-architect-associate">AWS「AWS Certified Solutions Architect - Associate」</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
