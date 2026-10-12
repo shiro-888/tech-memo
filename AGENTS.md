@@ -29,7 +29,8 @@
 │   └── <公開日-スラッグ>/    # 公開済みノート（例: 2026-06-28-foo/）
 │       └── index.html
 ├── tools/
-│   └── check_consistency.py # index.html のカードと記事メタの一致を検査（CI で実行）
+│   ├── check_consistency.py # index.html のカードと記事メタの一致を検査（CI で実行）
+│   └── extract_article_text.py # 記事 HTML の本文を抽出（yomiyasu のリンター用の前処理）
 ├── AGENTS.md               # このファイル
 ├── README.md
 ├── .pre-commit-config.yaml # ガードレール（gitleaks 等）
@@ -89,9 +90,15 @@ Ready for review に切り替え、マージ＝公開とする。
 - 「〜することができます」「〜を活用する」「〜についてご紹介します」など AI 頻出の
   冗長・定型表現を避け、素直で具体的な動詞にする。
 - 体言止めの連続、均等に網羅的なリスト、機械的な「まとめ」セクションを避ける。
-- 箇条書きは3〜4項目・階層1段までを目安にし、詰め込みすぎない。
+- 箇条書きは階層1段までを目安にし、詰め込みすぎない。
 - 実際に触った所感・つまずき・比喩など「その人にしか書けない要素」で人間味を出す
   （ただし「公開前の必須チェック」の範囲内で。個人情報・社内情報は書かない）。
+
+書き上げたあとの推敲には `yomiyasu` スキル（`.claude/skills/yomiyasu/SKILL.md`）を使う。
+`writing-guide` は内容と構成の方針、`yomiyasu` は意味を変えずに行う表現の推敲を受け持つ。
+常体・敬体、見出しの形、箇条書きの量、比喩の扱いなど、両者で食い違いうる文体の細部は
+`yomiyasu` の規則に従う。HTML 記事は `tools/extract_article_text.py` で本文を抽出して
+リンター（`yomiyasu_lint.py`）にかける（手順は `.claude/commands/draft.md` を参照）。
 
 出典: minorun365「あなたの技術ブログの『AI臭さ』を抜くスキル公開します」(Qiita)。
 著者が公開・再利用を意図して共有したスキルを、参照先だけ本リポジトリ向けに調整して収録した。
