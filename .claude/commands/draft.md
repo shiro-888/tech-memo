@@ -52,6 +52,14 @@ argument-hint: <トピック（書いてほしい題材）>
    - **書き上げたら `writing-guide` の禁止リストと照合してセルフレビュー**する。
      太字・ダッシュ区切りの多用、「〜することができます」「〜を活用する」「〜についてご紹介します」、
      体言止めの連続、均等網羅リストなどが残っていないか確認し、見つけたら直す。
+   - **続けて `yomiyasu` スキルで本文を推敲する**（`Skill` ツールで `yomiyasu` を起動）。
+     - ドメインは `tech`（技術記事）として扱う。常体・敬体は原文のまま保ち、意味と言い切りの強さを変えない。
+     - HTML 記事は yomiyasu がそのまま読めないため、本文を抽出して検査する:
+       `python -I tools/extract_article_text.py notes/_drafts/<slug>.html > <scratchpad>/body.md`
+       `python -I .claude/skills/yomiyasu/scripts/yomiyasu_lint.py <scratchpad>/body.md`
+     - リンターの指摘は見直し候補。文脈に合う表現や、意味を担う否定・評価は無理に直さない。
+     - 直すのは `<article>` 内の本文の文章だけ。タグ、属性、メタタグ、`.diagram` の SVG、コードブロックは変更しない。
+     - yomiyasu は元にない内容を足さない。人間味や所感は、この推敲より前の執筆段階で入れておく。
 
 4. **表示を検証**
    - Chromium（Playwright）で `notes/_drafts/<slug>.html` をレンダリングし、CSS 適用・カテゴリバッジ・図・リンク・コードブロック表示に崩れが無いか確認する。
