@@ -21,6 +21,8 @@ pre-commit run --all-files  # 初回: 全ファイルに対して手動実行
 
 記事本文の文体は `writing-guide` スキル（[.claude/skills/writing-guide/SKILL.md](./.claude/skills/writing-guide/SKILL.md)）に
 まとめています。`/draft`・`/publish` で執筆・レビューする際の品質チェックリストとして使います。
+書き上げたあとの表現の推敲には `yomiyasu` スキル（[.claude/skills/yomiyasu/SKILL.md](./.claude/skills/yomiyasu/SKILL.md)）を使います。
+HTML 記事の本文は `tools/extract_article_text.py` で抽出してから、同梱のリンターで検査します。
 
 ## ガードレール構成
 
