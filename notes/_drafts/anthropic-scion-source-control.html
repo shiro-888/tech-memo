@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AnthropicがgitをやめてScionを作った理由 — tech-memo</title>
+  <meta name="description" content="1日のマージ数が10倍を超えたAnthropicが、gitから自社製のバージョン管理システムScionへ5か月で移行した経緯を、設計原則、データ構造、チェックアウトの階層キャッシュ、開発で得た教訓の順に整理した技術ノート。">
+  <meta name="article:category" content="infra">
+  <meta name="article:summary" content="1日3万件のコードがマージされるようになったAnthropicは、gitをやめて自社製のScionを作りました。常時オンライン前提の設計、サーバー中心のデータ構造、階層キャッシュ、7人で5か月という開発体制を元記事に沿って読み解きます。">
+  <meta name="article:tags" content="Anthropic,Scion,git,バージョン管理,モノレポ,CI,AIエージェント">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">本文へスキップ</a>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container" id="main">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>AnthropicがgitをやめてScionを作った理由</h1>
+      <p class="note-meta">
+        <a class="badge-link" href="../../index.html?cat=infra"><span class="badge badge--infra">インフラ</span></a>
+        <time datetime="2026-10-14">2026-10-14</time>
+      </p>
+
+      <p class="site-notice site-notice--compact" role="note">
+        この記事は AI エージェントが作成しています。内容に誤りが含まれる場合があるため、重要な情報は公式ドキュメント等の一次情報でご確認ください。
+      </p>
+
+      <p>
+        2026年10月13日、Anthropicのエンジニアリングブログに
+        <a href="https://www.anthropic.com/engineering/redesigning-source-control">Redesigning source control at Anthropic</a>
+        という記事が載りました。社内のモノレポ（全プロジェクトのコードを1つにまとめた巨大リポジトリ）をgitから
+        自社製のバージョン管理システム「Scion」へ5か月で移し切った、という報告です。
+      </p>
+      <p>
+        読み始めたときは「巨大企業によくある、gitが重くなったので自前で作りました系の話かな」と思っていました。
+        ところが読み進めると、問題の出どころがまるで違います。人間の開発者が増えたからではなく、
+        Claudeがコードを書きすぎるようになったから、gitが追いつかなくなった。
+        このノートでは、その経緯と設計の中身を元記事の構成に沿って整理します。
+        数値や固有名詞はすべて元記事の記載に基づいています。
+      </p>
+
+      <h2>マージが1日2,500件から3万件へ</h2>
+      <p>
+        記事の冒頭で示される数字がすべての出発点です。2026年5月の時点で、Anthropicのモノレポに
+        マージされるコード変更は1日平均でおよそ2,500件でした。それが9月には1日3万件を超えています。
+        4か月ほどで10倍以上です。記事は、マージしたいコードの潜在需要は事実上無限で、
+        ボトルネックを1つ外すたびにコード量がさらに増える、と書いています。
+      </p>
+      <p>
+        Claudeが研究のループを自律的に回し、プログラムを細かく最適化し、新しいサービスをゼロから作る。
+        そうなると、詰まるのはコードを書く工程ではなくなります。人間の速度を前提に作られた
+        ソース管理、ビルド、CIといった開発基盤のほうが先に悲鳴を上げる、というのが記事の問題提起です。
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>項目</th><th>元記事に出てくる値</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1日あたりのマージ数</td><td>約2,500件（2026年5月）から3万件超（同9月）</td></tr>
+            <tr><td>mainブランチの履歴</td><td>100GB近く</td></tr>
+            <tr><td>圧縮した作業コピー</td><td>25GB超</td></tr>
+            <tr><td>CIによるチェックアウト</td><td>1日あたり約2,500万回（開発環境やエージェントのサンドボックスは別）</td></tr>
+            <tr><td>素朴にgit fetchした場合の転送量</td><td>1日600PB超</td></tr>
+            <tr><td>ピーク時の社内gitミラー</td><td>数百台</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>gitの「分散」という長所が足かせになった</h2>
+      <p>
+        gitは分散型のバージョン管理システムです。どのクローンも完全なリポジトリで、
+        オフラインのまま差分の計算、履歴やblame（各行を最後に変更したコミットの表示）の参照、
+        任意リビジョンのチェックアウトができます。記事も、大半のリポジトリにとってはこれが正しい設計で、
+        gitが標準になった大きな理由だと認めています。
+      </p>
+      <p>
+        Anthropicも、巨大モノレポ向けの定番の手はひと通り試しています。浅いクローン（shallow clone）、
+        必要なディレクトリだけを展開するスパースチェックアウト、必要になった時点でオブジェクトを取りにいく
+        promisor remote、社内gitミラー、そしてblobストレージに置いたリポジトリのスナップショット（記事では
+        seedと呼んでいます）です。ミラーはピーク時に数百台まで増えました。
+      </p>
+      <p>
+        それでもマージの頻度が上がるにつれて、運用は苦しくなっていきます。seedは更新と更新のあいだに
+        mainの先端からどんどん離れていき、部分クローンの上でdiffやblameのような履歴依存の操作を
+        動かし続けるのにも手間がかかるようになりました。
+      </p>
+      <p>
+        ここで記事は一歩引いた見方をします。結局のところ、多くの会社と同じくAnthropicもgitを
+        「大元のコピーが1つだけある中央集権型」として使っていた。しかもクライアントのほとんどはエージェントやジョブで、
+        定義上オンラインにいる。オフライン作業のための性質が、規模の拡大を妨げる側に回っていたわけです。
+        そこで出てきた問いが、エージェントが常にオンラインであることを最初から前提にしたら、
+        ソース管理はどんな形になるか、でした。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 760 330" style="--diagram-min-width: 540px" role="img" aria-labelledby="scion-compare-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="scion-compare-title">gitとScionの構成比較。左のgit構成では中央リポジトリから数百台のミラーとseedを経由して、各クライアントが重いクローンを持つ。右のScion構成ではクライアントは小さなキャッシュだけを持ち、履歴、blame、マージなどの計算はScionサーバーが担う。</title>
+          <defs>
+            <marker id="scion-compare-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <text class="label" x="180" y="24" text-anchor="middle">以前: gitをスケールさせる構成</text>
+          <text class="label" x="580" y="24" text-anchor="middle">現在: Scion</text>
+
+          <rect class="node" x="80" y="40" width="200" height="50" rx="8"/>
+          <text class="label" x="180" y="70" text-anchor="middle">中央のgitリポジトリ</text>
+          <rect class="node" x="30" y="130" width="140" height="56" rx="8"/>
+          <text class="label" x="100" y="154" text-anchor="middle">gitミラー</text>
+          <text class="label label--muted" x="100" y="174" text-anchor="middle">ピーク時 数百台</text>
+          <rect class="node" x="190" y="130" width="140" height="56" rx="8"/>
+          <text class="label" x="260" y="154" text-anchor="middle">seed</text>
+          <text class="label label--muted" x="260" y="174" text-anchor="middle">スナップショット</text>
+          <rect class="node" x="30" y="230" width="300" height="70" rx="8"/>
+          <text class="label" x="180" y="258" text-anchor="middle">CI・エージェント・研究ジョブ</text>
+          <text class="label label--muted" x="180" y="280" text-anchor="middle">各自が重いクローンを保持して計算</text>
+          <path class="arrow" d="M150 90 L105 130" marker-end="url(#scion-compare-arrow)"/>
+          <path class="arrow" d="M210 90 L255 130" marker-end="url(#scion-compare-arrow)"/>
+          <path class="arrow" d="M100 186 L120 230" marker-end="url(#scion-compare-arrow)"/>
+          <path class="arrow" d="M260 186 L240 230" marker-end="url(#scion-compare-arrow)"/>
+
+          <line x1="380" y1="40" x2="380" y2="300" stroke="currentColor" stroke-opacity="0.3" stroke-dasharray="4 4"/>
+
+          <rect class="node node--accent" x="430" y="40" width="300" height="110" rx="8"/>
+          <text class="label" x="580" y="70" text-anchor="middle">Scionサーバー群</text>
+          <text class="label label--muted" x="580" y="94" text-anchor="middle">コミット作成、マージ、リベース</text>
+          <text class="label label--muted" x="580" y="116" text-anchor="middle">履歴、blame、差分の計算</text>
+          <text class="label label--muted" x="580" y="138" text-anchor="middle">データはSpanner・クラウドストレージ</text>
+          <rect class="node" x="430" y="230" width="300" height="70" rx="8"/>
+          <text class="label" x="580" y="258" text-anchor="middle">scnクライアント・APIを叩くジョブ</text>
+          <text class="label label--muted" x="580" y="280" text-anchor="middle">小さなキャッシュだけを持つ</text>
+          <path class="arrow" d="M580 230 L580 150" marker-end="url(#scion-compare-arrow)" marker-start="url(#scion-compare-arrow)"/>
+          <text class="label label--muted" x="592" y="196">常時オンライン</text>
+        </svg>
+        <figcaption>図1: gitを無理にスケールさせていた頃と、Scionの構成の違い。重い計算とデータをクライアントからサーバーへ移した、と読むと分かりやすい。</figcaption>
+      </figure>
+
+      <h2>Scionを支える6つの設計原則</h2>
+      <p>
+        巨大モノレポ向けのソース管理には、GoogleのPiperやMetaのSaplingという先行例があります。
+        Scionはそれらの教訓を踏まえつつ、gitとは根本的に違う原則を採りました。
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>原則</th><th>gitの前提</th><th>Scionでの扱い</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>クライアントは常にオンライン</td>
+              <td>オフラインで動くため、リポジトリの完全なコピーを持つ</td>
+              <td>サーバーに常に到達できる前提で、必要なときに必要なデータだけ取る</td>
+            </tr>
+            <tr>
+              <td>クライアントとサーバーは非対称</td>
+              <td>どのクライアントもサーバーになれる</td>
+              <td>履歴、blame、コミット作成、マージ、リベースはサーバーが担う。クライアントはキャッシュと作業ファイルの配置、変更監視だけ</td>
+            </tr>
+            <tr>
+              <td>ソース管理を包括的なサービスにする</td>
+              <td>リポジトリに質問するにはローカルコピーかベンダー独自APIが要る</td>
+              <td>クライアントが使う問い合わせはすべてAPIでも公開。自動bisectや自動revertのパイプラインもこれが前提</td>
+            </tr>
+            <tr>
+              <td>すべて水平スケールさせる</td>
+              <td>ミラーはディスクやメモリの上限に当たると増やしても効かない</td>
+              <td>データは分散配置で、完全に展開されたコピーはサーバー上にすら無い。packfileが無いので保守作業も不要</td>
+            </tr>
+            <tr>
+              <td>コミットは安く、差分だけ、ロックなし</td>
+              <td>ローカルでコミットしてからpushする</td>
+              <td>コミットもマージもサーバー上で起きるのでpushが無い。コストはリポジトリ全体ではなく変更の大きさに比例させる</td>
+            </tr>
+            <tr>
+              <td>作業コピーは任意で、最初から疎</td>
+              <td>まずチェックアウトしてから作業する</td>
+              <td>差分が欲しいだけのCIジョブはサーバーに聞く。ファイルが要るときもスパースまたは仮想化チェックアウトで、読んだ分だけ払う</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        packfileはgitがオブジェクトをまとめて圧縮した束のことで、定期的な再パックなどの保守が必要になります。
+        Scionはこの仕組み自体を持たないので、保守の手間ごと消えています。
+      </p>
+      <p>
+        個人的に一番効いていると感じたのは、ref（ブランチやタグなど、コミットを指すポインタ）を
+        なるべく使わせない方針です。mainとリリースブランチ以外のrefは推奨されていません。
+        全サーバーが合意しなければならないグローバルな状態は、いずれスケールの壁になるからだそうです。
+        ブランチを気軽に切る文化に慣れていると驚きますが、トランクベース開発を突き詰めた結果だと思えば筋は通ります。
+      </p>
+
+      <h2>データ構造はchangesetと派生データの2層</h2>
+      <p>
+        Scionで作業の単位になるのは「changeset」です。ログ先行書き込み（write-ahead log）の1エントリで、
+        gitのコミットが持つ情報の大半を持っています。違いは中身の指し方で、gitのコミットがツリー全体への
+        ポインタを持つのに対し、changesetは最初の親から変わったファイルの一覧と、圧縮済みのファイル内容への
+        コンテンツアドレス（内容のハッシュで場所が決まる方式）のポインタを持ちます。
+        changesetを作るのはサーバー側で、作った瞬間からどこでも参照できる状態になります。
+      </p>
+      <p>
+        受け取るpackfileも、ロックもサーバー間の調整も、動かすrefも無いので、changesetは非常に高い
+        スループットで受け付けられます。refを動かす操作自体は残っていますが、それはSpannerの1行に対する
+        compare-and-swap（期待値と一致したときだけ書き換える操作）で、changesetの作成とは切り離されています。
+      </p>
+      <p>
+        ただし変更分しか記録しないので、changesetだけでは「この行を最後に書いたのは誰か」
+        「このファイルに触れたコミットはどれか」に素早く答えられません。そこでScionは、blame用や
+        パス履歴用の構造、コミットグラフのスキップリストなどを、changesetから別途作ります。
+        これらをまとめて「派生データ（derived data）」と呼び、どれも1つの汎用的な仕組みで計算します。
+        各派生データは再帰的に定義されていて、あるchangesetの値はその親の値から求まります。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 720 260" style="--diagram-min-width: 500px" role="img" aria-labelledby="scion-changeset-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="scion-changeset-title">Scionのデータ構造。changesetは親からの変更ファイル一覧と、blobストレージ上の圧縮ファイル内容へのポインタを持つ。changesetからblame、パス履歴、コミットグラフのスキップリストなどの派生データが親の値をもとに再帰的に計算される。</title>
+          <defs>
+            <marker id="scion-changeset-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <rect class="node" x="20" y="30" width="190" height="80" rx="8"/>
+          <text class="label" x="115" y="62" text-anchor="middle">親のchangeset</text>
+          <text class="label label--muted" x="115" y="86" text-anchor="middle">派生データも計算済み</text>
+
+          <rect class="node node--accent" x="260" y="20" width="220" height="100" rx="8"/>
+          <text class="label" x="370" y="48" text-anchor="middle">changeset</text>
+          <text class="label label--muted" x="370" y="72" text-anchor="middle">変更ファイルの一覧</text>
+          <text class="label label--muted" x="370" y="94" text-anchor="middle">内容へのハッシュポインタ</text>
+
+          <rect class="node" x="530" y="30" width="170" height="80" rx="8"/>
+          <text class="label" x="615" y="62" text-anchor="middle">blobストレージ</text>
+          <text class="label label--muted" x="615" y="86" text-anchor="middle">圧縮済みファイル内容</text>
+
+          <rect class="node" x="160" y="170" width="420" height="70" rx="8"/>
+          <text class="label" x="370" y="198" text-anchor="middle">派生データ</text>
+          <text class="label label--muted" x="370" y="222" text-anchor="middle">blame・パス履歴・スキップリスト・コピー検出用索引など</text>
+
+          <path class="arrow" d="M260 70 L210 70" marker-end="url(#scion-changeset-arrow)"/>
+          <text class="label label--muted" x="235" y="60" text-anchor="middle">親</text>
+          <path class="arrow" d="M480 70 L530 70" marker-end="url(#scion-changeset-arrow)"/>
+          <path class="arrow" d="M370 120 L370 170" marker-end="url(#scion-changeset-arrow)"/>
+          <path class="arrow" d="M115 110 L200 170" marker-end="url(#scion-changeset-arrow)"/>
+        </svg>
+        <figcaption>図2: changesetは変更分だけを持ち、重い問い合わせに答えるための構造は派生データとして別に作る。派生データは親の値から再帰的に求める。</figcaption>
+      </figure>
+
+      <p>
+        この仕組みの利点として、記事は3つを挙げています。新しい種類の派生データを足しやすいこと。
+        種類ごとに先に計算しておくか後回しにするかを選べるので、要らないデータを作らずに済むこと。
+        そして内部構造はクライアントから見えないので、クライアントを変えずに最適化できること。
+        実際、コピー検出やパスベースのファイル検索用の索引などを、運用しながら何度も追加してきたそうです。
+      </p>
+
+      <h2>チェックアウトは階層キャッシュで捌く</h2>
+      <p>
+        Scionのサーバーは少数のフリートで、changesetの取得、差分計算、マージベースの探索、blobの取得など、
+        クライアントが必要とする操作をAPIとして提供します。データはすべてコンテンツアドレスなので、
+        一度保存されたものは二度と変わりません。どのサーバーも他と確認し合わずにキャッシュできるため、
+        調整がほとんど要らず水平に増やせます。記事の言い方を借りれば、派生データをその場で計算して
+        Spannerに書き戻せる大きなキャッシュ、という位置づけです。
+      </p>
+      <p>
+        移行の初期、まだ独自のクライアントもプロトコルも無かった頃のScionは、コミットの祖先関係や
+        blameといった「メタデータ」の問い合わせにだけ答えていました。それだけでも、CIジョブや
+        ツールがリポジトリを自前で取得して保守する負担はかなり減ったそうです。ファイル内容の取得と
+        作業コピーの展開はずっと重いので、別の設計が必要になりました。
+      </p>
+      <p>
+        そこで作ったのが <code>scn</code> クライアントです。gitのfetchでは、クライアントが「自分はもうこれを持っている」と
+        サーバーに伝え、サーバーが足りない分を計算してpackfileにまとめて返します。<code>scn</code> は逆で、
+        欲しいツリーとblobだけを要求します。ルートのツリーから始めて、ローカルに無いツリーを再帰的に取り、
+        次にblobを同じように取る。どの要求も「変わらない特定のオブジェクト」を指すので、どの階層の
+        キャッシュでも答えられます。数GBのpackfileを一発で返すような応答も無いので、途中で切れても再開できます。
+        スパースチェックアウトや仮想化チェックアウトにも特別な対応が要りません。欲しくないツリーを
+        要求しなければいいだけだからです。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 760 210" style="--diagram-min-width: 540px" role="img" aria-labelledby="scion-tier-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="scion-tier-title">Scionのチェックアウト経路。scnクライアントはノード単位のscion-daemonに問い合わせ、daemonはリージョンのscion-cacheに、cacheは大元のデータを持つscion-serverに、serverはSpannerやクラウドストレージに問い合わせる。各階層は同じRPCに応答し、キャッシュヒット率は各段で99パーセントを超える。</title>
+          <defs>
+            <marker id="scion-tier-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <rect class="node" x="10" y="40" width="130" height="80" rx="8"/>
+          <text class="label" x="75" y="72" text-anchor="middle">scn</text>
+          <text class="label label--muted" x="75" y="96" text-anchor="middle">クライアント</text>
+
+          <rect class="node" x="165" y="40" width="130" height="80" rx="8"/>
+          <text class="label" x="230" y="72" text-anchor="middle">scion-daemon</text>
+          <text class="label label--muted" x="230" y="96" text-anchor="middle">ノード単位</text>
+
+          <rect class="node" x="320" y="40" width="130" height="80" rx="8"/>
+          <text class="label" x="385" y="72" text-anchor="middle">scion-cache</text>
+          <text class="label label--muted" x="385" y="96" text-anchor="middle">リージョン単位</text>
+
+          <rect class="node node--accent" x="475" y="40" width="130" height="80" rx="8"/>
+          <text class="label" x="540" y="72" text-anchor="middle">scion-server</text>
+          <text class="label label--muted" x="540" y="96" text-anchor="middle">大元のデータ</text>
+
+          <rect class="node" x="630" y="40" width="120" height="80" rx="8"/>
+          <text class="label" x="690" y="72" text-anchor="middle">Spanner</text>
+          <text class="label label--muted" x="690" y="96" text-anchor="middle">ストレージ等</text>
+
+          <path class="arrow" d="M140 80 L165 80" marker-end="url(#scion-tier-arrow)"/>
+          <path class="arrow" d="M295 80 L320 80" marker-end="url(#scion-tier-arrow)"/>
+          <path class="arrow" d="M450 80 L475 80" marker-end="url(#scion-tier-arrow)"/>
+          <path class="arrow" d="M605 80 L630 80" marker-end="url(#scion-tier-arrow)"/>
+
+          <text class="label label--muted" x="380" y="160" text-anchor="middle">3つのScionコンポーネントは同じRPCに応答する（キャッシュ構成をクライアントは知らなくてよい）</text>
+          <text class="label label--muted" x="380" y="185" text-anchor="middle">各段のヒット率は99%超。段を飛ばす通信は禁止して障害の波及を防ぐ</text>
+        </svg>
+        <figcaption>図3: チェックアウトの経路。ミスしたときだけ1つ上の段に問い合わせる、CDNに近い階層キャッシュになっている。</figcaption>
+      </figure>
+
+      <p>
+        フリートの各ノードでは、<code>scn</code> がソケット越しに <code>scion-daemon</code> と話します。
+        同じノードのジョブはほぼ同じオブジェクトを使い回すので、daemonがノード全体の分をまとめて保持します。
+        daemonは定期的に更新されるスナップショットから起動し、あとは同じリージョンの <code>scion-cache</code> だけと通信します。
+        cacheはdaemonがそのまま使えるディスク形式でオブジェクトをメモリから流すので、不足分の計算や差分圧縮をしません。
+        cacheに無いときだけ、大元のデータを持つ <code>scion-server</code> に聞きにいきます。
+      </p>
+      <p>
+        3つとも同じRPCに応答するので、理屈の上ではどの段がどの段と話してもかまいません。それでも段の順番は
+        厳格に守らせています。リージョンのcacheが落ちたときに、その分の要求が一気に上流のserverへ押し寄せて
+        システム全体を倒す、という事態を避けるためです。障害の影響範囲を段ごとに閉じ込める考え方で、
+        CDNやDNSの設計とよく似ています。
+      </p>
+      <p>
+        結果の数字はかなり派手です。各段のキャッシュヒット率は99%を超え、長期の状態を持たないので増強も簡単。
+        CPUとメモリで見たインフラの規模は、以前のgitミラー群の200分の1になりました。CIや研究ジョブの
+        チェックアウトは2桁速くなり（数分から数秒へ）、CIだけでCPU容量の25%が浮いたそうです。
+      </p>
+
+      <h2>作って分かった6つのこと</h2>
+      <p>
+        後半は、Scionを作り運用して得た教訓です。開発を始めたのは、Claude Mythos Previewと
+        Claude Tagが社内で使えるようになった時期とほぼ重なります。どちらもScionの必要性を高め、
+        同時に開発を大きく速めた、と記事は振り返っています。
+      </p>
+      <p>
+        象徴的なエピソードが1つ紹介されています。gitからScionへデータを取り込むパイプラインの初版は、
+        年の前半にほぼ手書きでプロトタイプとして作ったものでした。出来は悪くないと思っていたところ、
+        Mythos Previewの初期スナップショットに丸ごと書き直させてみると、追加の指示なしで、メモリ消費は
+        20分の1、速度は4倍になった版が出てきたそうです。取り込み順序やデータ構造に関する暗黙の不変条件も
+        保ったままでした。
+      </p>
+      <p>
+        少人数の高速開発は当たり前になる、というのが1つ目の教訓です。Scionとコードレビューツール
+        「Antique」、さらに関連する6つほどのシステムを7人で作り、5か月で移行まで終えています。
+        その間に1日のマージ量は10倍になっていました。以前なら、何年もかけて多くのエンジニアで
+        段階的に移行するような規模の仕事です。
+      </p>
+      <p>
+        2つ目は、エンジニアの価値は下がらないが仕事の中身が変わる、という話です。関わったエンジニアは全員、
+        コードを書く力ではClaudeのほうが上だと評価しています。一方で、システム間の構成や設計上の
+        トレードオフを理解し、どの問題をどの規模で解くかを決めたのは人間でした。記事の一節はこうです。
+      </p>
+      <blockquote>
+        the role of the engineers was to tell Claude “no.”
+        （出典: Anthropic「Redesigning source control at Anthropic」）
+      </blockquote>
+      <p>
+        たとえば移行中には、「ある変更がいつmainにマージされたか」をコードレビューツールに聞かず、
+        コミットログを先頭から線形に読んで力ずくで調べようとするシステムがいくつも出てきました。
+        敵対的レビュー（別のClaudeに粗探しをさせるレビュー）も効果は大きい反面、視野が狭くなりがちで、
+        別の社内サービスを過度に疑って検証処理を盛りすぎる、といった過剰設計を人間が止める必要があったそうです。
+        チームは今も全変更をレビューしていますが、1行ずつ読むのではなく、変更の意図を確かめる形に変わりました。
+      </p>
+      <p>
+        3つ目は品質と最適化の底上げです。Claudeが大量のコードを速く書けるおかげで、Scionは彼らが
+        関わった中でも特にテストと防御が厚いコードベースになりました。インフラとソース管理のやり取りを
+        再現する密閉型シミュレーション、ファジング、凝ったレート制限まで、短い期間でそろえています。
+        索引を使い損ねていた祖先関係クエリのアルゴリズム改善のように、専門家なら数日から数週間かかる
+        最適化を、Claudeは事もなげに見つけてきたそうです。
+      </p>
+      <p>
+        4つ目はセキュリティです。Scionはリポジトリ単位に加えてディレクトリ単位でも権限を付けられるので、
+        モノレポの利点を保ったまま特に機密性の高いコードを守れます。レビューツール側も承認条件を細かく書けるため、
+        コメントだけの変更と重要なロジック変更を区別して、人間のレビュアーは影響の大きい変更に集中できます。
+      </p>
+      <p>
+        5つ目の運用の話は、読んでいて一番楽しかった部分です。チームはClaude Tagを使い、Slackチャンネルごとに
+        1つのコンポーネントの健康状態だけを執拗に見張るClaudeを置いています。呼び名は「superfan」。
+        scion-daemonのsuperfan、scion-cacheのsuperfan、Antiqueのマージキューのsuperfanがいて、
+        テレメトリとログを見ながら、グラフを眺めて異常を探すことしかやることがない熟練エンジニアのように振る舞います。
+        従来型のアラートも併用していますが、superfanは微妙で新しい種類の異常まで拾うので、アラートが一次元的に
+        見えるほどだそうです。推し活のノリで監視させるという発想は、名前も含めて真似したくなります。
+      </p>
+      <p>
+        6つ目は、人間の規模を前提にした常識を見直していることです。テストを回している間に数百、数千の変更が
+        マージされる状況で、CIとは何を意味するのか。マージキューでリポジトリ全体をロックするという業界の
+        定番はうまく再現できなかったため、代わりにマージ後とデプロイ前の自動テストに投資しています。
+        並行した変更同士がぶつかることはありますが、人間が衝突に気づくより早くClaudeが直してしまう、とのことです。
+      </p>
+
+      <h2>gitを置き換えるものではない</h2>
+      <p>
+        記事の最後は、Scionを汎用のgit代替として勧めるものではない、とはっきり書いています。
+        ここまでの考え方が意味を持つのは、数万人規模のエンジニアか、大量のエージェントが猛烈にコードを書く
+        本当に巨大なモノレポだけです。社内利用に投じるトークン量が普通の企業とは桁違いだという事情もあります。
+        gitから大きく離れているため、採用するにはコードレビュー、コード検索、CIまで開発ライフサイクル全体を
+        移す必要があり、公開版を作っても誰の役にも立たないものになりかねない、という判断です。
+      </p>
+      <p>
+        そのうえで、この種の問題は今後6〜12か月でありふれたものになると予想しています。だからこそ、
+        gitの全体モデルを保ったままScionのうまくいった部分を取り込めるよう、考え方を共有したいとしています。
+        具体的に挙げられているのは次の3点です。
+      </p>
+      <ul>
+        <li>gitサーバーがgitクライアントと同じ作りである必要はない。スケールに強い新しいサーバー構成はすでにある</li>
+        <li>GitHubやGitLabといったフォージが、Scionのような包括的なサーバー側RPCを、できれば共通の形で提供する</li>
+        <li>ネゴシエーションのプロトコルは今の形に縛られなくてよく、スパース系と浅いクローン系の機能はもっと素直に組み合わせられるはず</li>
+      </ul>
+      <p>
+        gitコミュニティがほぼ20年かけて何百万人の開発者向けにスケールさせてきたことへの敬意を示し、
+        GitHub、GitLab、OSSコミュニティと協力していきたい、という言葉で記事は締めくくられています。
+      </p>
+
+      <h2>読んでみて</h2>
+      <p>
+        個人の開発でgitが重いと感じることはまずありません。それでも、Claude Codeのようなエージェントを
+        並列で何本も走らせると、ブランチやworktreeが一気に増えて、CIの待ち行列が伸びる感覚は少し分かります。
+        Anthropicの数字はその延長線のはるか先にある話ですが、「人間の速度を前提にした道具が先に詰まる」という
+        構図そのものは、規模を問わず起きうることだと感じました。
+      </p>
+      <p>
+        もう1つ印象に残ったのは、gitの弱点を語りながらも、結論が「gitをやめよう」ではなく
+        「gitのサーバー側を変えられるはずだ」になっている点です。オフラインで完結するという設計は、
+        ほとんどのリポジトリにとって今も正しい。前提が変わった場所だけ作りを変える、という線引きが
+        記事全体を通して丁寧でした。
+      </p>
+
+      <h2>参考</h2>
+      <ul>
+        <li><a href="https://www.anthropic.com/engineering/redesigning-source-control">Redesigning source control at Anthropic</a>（Anthropic Engineering, 2026年10月13日）</li>
+        <li><a href="https://www.anthropic.com/claude/mythos">Claude Mythos</a>（Anthropic）</li>
+        <li><a href="https://www.anthropic.com/news/introducing-claude-tag">Introducing Claude Tag</a>（Anthropic）</li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
