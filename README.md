@@ -30,3 +30,5 @@ HTML 記事の本文は `tools/extract_article_text.py` で抽出してから、
 - GitHub: Secret scanning / Push protection（Settings で有効化）
 - CI: PR時の `guardrails` ジョブ（[.github/workflows/pre-publish-check.yml](./.github/workflows/pre-publish-check.yml)）で
   gitleaks とリンク切れ検査（lychee）を実行
+- lychee の設定は [lychee.toml](./lychee.toml)、除外する URL は [.lycheeignore](./.lycheeignore) に書く。
+  404 などの「存在しない」結果は失敗にし、一時的な 503、429、タイムアウトは失敗にしない
