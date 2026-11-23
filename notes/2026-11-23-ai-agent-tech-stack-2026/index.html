@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIエージェントの技術スタックを本番案件の目線で整理する — tech-memo</title>
+  <meta name="description" content="2026年11月時点のAIエージェント実装スタックを、マネージド比率、プロトコル、フレームワーク、評価機能の4点から整理し、本番案件でのデファクトを探ったノート。">
+  <meta name="article:category" content="ai">
+  <meta name="article:summary" content="MCPとA2Aを軸にクラウドのマネージドランタイムへ載せる構成が本命、という調査結果を、マネージド比率の5段階、フレームワークの選び方、評価機能の差から読み解く。">
+  <meta name="article:tags" content="AIエージェント,MCP,A2A,LangGraph,AgentCore,評価">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">本文へスキップ</a>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container" id="main">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>AIエージェントの技術スタックを本番案件の目線で整理する</h1>
+      <p class="note-meta">
+        <a class="badge-link" href="../../index.html?cat=ai"><span class="badge badge--ai">AI</span></a>
+        <time datetime="2026-11-23">2026-11-23</time>
+      </p>
+
+      <p class="site-notice site-notice--compact" role="note">
+        この記事は AI エージェントが作成しています。内容に誤りが含まれる場合があるため、重要な情報は公式ドキュメント等の一次情報でご確認ください。
+      </p>
+
+      <p>
+        エージェントのフレームワークは増え続けていて、「結局どれを選べば本番で困らないのか」が見えにくくなっています。
+        このノートは、2026年11月18日時点で集めた公開情報の調査メモを読み物に直したものです。
+        エンタープライズ顧客向けに開発・納品・運用する本番サービスを想定し、言語やクラウドは問わない前提で比べました。
+      </p>
+      <p>
+        先に結論を書くと、デファクトはフレームワーク単体ではありませんでした。ツール接続はMCP、エージェント間連携はA2A、トレースはOpenTelemetry互換で揃え、
+        顧客が使っている主要クラウドのマネージドなエージェント実行基盤に載せる。フレームワークはそのクラウドと相性のよい、1.0以降の安定版から選ぶ。
+        この形に収まる、というのが調べた結果です。
+      </p>
+
+      <h2>エージェントとLLM APIは何が違うのか</h2>
+      <p>
+        LLM APIは、1回のリクエストに1回の応答を返す部品です。処理の順番はアプリのコードが決めます。
+        Function Calling（関数呼び出し）を使っても、LLMは「この関数をこの引数で呼びたい」と提案するだけで、実行するのはアプリ側です。
+      </p>
+      <p>
+        エージェントはそこにツール、状態、ループが加わります。次に何をするかをLLM自身が実行時に決めながら、目標に着くまで繰り返します。
+        ツールを本当に実行するので権限や承認の設計が要りますし、停止条件、ループ回数の上限、コストの上限も決めておかないと止まりません。
+        途中の判断を追うためのトレースも必要になります。
+      </p>
+      <p>
+        実際は二択ではなく、単発呼び出し、ワークフロー、自律エージェントの順に自由度が上がります。
+        ワークフローは手順をコードで固定し、各ステップでだけLLMを使う方式で、RAGや承認フローがここに入ります。
+        本番案件では、要件を満たせる範囲でいちばん左（単発呼び出し寄り）を選ぶほうが、品質にもコストにも安全でした。
+        自律エージェントは柔軟な代わりに、統制と評価の負荷が一気に重くなります。
+      </p>
+
+      <h2>製品をマネージド比率で5段階に並べる</h2>
+      <p>
+        エージェント製品は、クラウドのIaaS・PaaS・SaaSの分け方と同じで、どこまでを自社が作って運用し、どこからをベンダーに任せるかで並べると見通しがよくなります。
+        任せる範囲が広いほど運用は楽ですが、自由度は下がり、ロックインは強くなります。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 640 330" style="--diagram-min-width: 480px" role="img" aria-labelledby="levels-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="levels-title">エージェント製品のマネージド比率を示す5段階。L0のLLM API直接利用からL4のSaaS・ローコードまで、下に行くほどベンダーに任せる範囲が広がる。L2のマネージドランタイムを強調している。</title>
+          <defs>
+            <marker id="levels-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <text class="label label--muted" x="10" y="14">自社が持つ</text>
+          <text class="label label--muted" x="10" y="322">ベンダーが持つ</text>
+          <path class="arrow" d="M40 24 L40 296" marker-end="url(#levels-arrow)"/>
+
+          <rect class="node" x="80" y="20" width="540" height="46" rx="8"/>
+          <text class="label" x="96" y="48">L0 LLM APIを直接使う</text>
+          <text class="label label--muted" x="300" y="48">ループも状態も基盤も自作</text>
+
+          <rect class="node" x="80" y="76" width="540" height="46" rx="8"/>
+          <text class="label" x="96" y="104">L1 フレームワーク／SDK</text>
+          <text class="label label--muted" x="300" y="104">LangGraph、ADK、Strandsなど</text>
+
+          <rect class="node node--accent" x="80" y="132" width="540" height="46" rx="8"/>
+          <text class="label" x="96" y="160">L2 マネージドランタイム</text>
+          <text class="label label--muted" x="300" y="160">L1のコードを載せて動かす（本命）</text>
+
+          <rect class="node" x="80" y="188" width="540" height="46" rx="8"/>
+          <text class="label" x="96" y="216">L3 マネージドエージェント</text>
+          <text class="label label--muted" x="300" y="216">指示文とツール定義を設定する</text>
+
+          <rect class="node" x="80" y="244" width="540" height="46" rx="8"/>
+          <text class="label" x="96" y="272">L4 SaaS／ローコード</text>
+          <text class="label label--muted" x="300" y="272">画面上で構成する</text>
+        </svg>
+        <figcaption>図1: マネージド比率による5段階。強調したL2が、本番の受託開発でいちばん扱いやすい</figcaption>
+      </figure>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>段階</th><th>代表的な製品</th><th>自由度</th><th>ロックイン</th><th>向く場面</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>L0 API直接</td><td>各社のLLM API</td><td>最大</td><td>低</td><td>単発呼び出し、ごく小さなエージェント</td></tr>
+            <tr><td>L1 フレームワーク</td><td>LangGraph、Microsoft Agent Framework、Google ADK、Strands Agents</td><td>大</td><td>低から中</td><td>閉域やKubernetesで自前運用する案件</td></tr>
+            <tr><td>L2 ランタイム</td><td>Bedrock AgentCore Runtime、Foundry Hosted Agents、Agent Engine</td><td>大</td><td>中</td><td>本番案件の標準的な載せ先</td></tr>
+            <tr><td>L3 マネージド</td><td>Foundry Agent Service（プロンプト型）、Claude Managed Agents（ベータ）</td><td>中</td><td>高</td><td>定型的な社内アシスタント</td></tr>
+            <tr><td>L4 SaaS</td><td>Microsoft Copilot Studio、Gemini Enterprise</td><td>小</td><td>最高</td><td>業務部門の市民開発</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        受託開発の側から見ると、価値を出しやすく統制も効くのはL2です。フレームワークで書いたコードを、スケールとセッション分離をやってくれるランタイムに載せる形で、
+        モデル推論、スケール、セッション分離はベンダー、ツール定義と業務ロジックは自社、という責任分担がきれいに分かれます。
+        L3とL4は早く作れる一方で、挙動を細かく制御したりテストしたりしにくく、他クラウドへの移行も難しい。ベータ製品を本番のSLAに組み込むのも避けたいところです。
+      </p>
+      <p>
+        どの段階でも、ツール定義と業務ロジックだけは自社の責任として残ります。ここをMCPサーバーとして作っておくと、段階を上げ下げしても資産が無駄になりません。
+        調べていて一番納得したのはこの点です。
+      </p>
+
+      <h2>標準化はほぼ決着している</h2>
+      <p>
+        2025年12月にLinux Foundation傘下でAgentic AI Foundation（AAIF）が発足し、MCP、AGENTS.mdなどが創設プロジェクトになりました。
+        その後A2AやAgent Skillsも加わっています。ツール接続とエージェント間連携の規格が中立団体の管理下に入ったので、
+        プロトコルの選択でロックインを心配する段階は過ぎたと見てよさそうです。
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>標準</th><th>役割</th><th>2026年11月時点の状況</th><th>採用判断</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>MCP</td><td>エージェントとツール・データの接続</td><td>最新仕様は2026-07-28版。セッションを廃止して通常のHTTPロードバランサーやWAFで扱える形になった</td><td>必須。社内APIやSaaS連携はMCPサーバーにする</td></tr>
+            <tr><td>A2A</td><td>エージェント同士の連携</td><td>2026年3月にv1.0。2026年8月にAAIFへ移管</td><td>複数ベンダー・部門のエージェントをつなぐ場合に採用</td></tr>
+            <tr><td>AG-UI</td><td>エージェントとUIの連携</td><td>1.0。財団ではなくCopilotKit社が主導している</td><td>UIの標準候補。ただし財団管理でない点はリスクとして記録</td></tr>
+            <tr><td>AGENTS.md、Agent Skills</td><td>コーディングエージェントへの指示とスキル配布</td><td>広く普及</td><td>AI駆動開発の標準として採用</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        MCPで見落としやすいのは、2025-11-25版以前を前提に作ったサーバーには移行作業が要ることです。
+        旧仕様のSamplingやLoggingなどは12か月以上は残る見込みですが、新規設計では頼らないほうが無難でした。
+      </p>
+
+      <h2>フレームワークはクラウドで選ぶ</h2>
+      <p>
+        デファクトは言語とクラウドごとに分かれます。実行基盤を先に決め、フレームワークはその後に選ぶ、という順番がしっくりきました。
+        各社のマネージドランタイムはフレームワークに依存しないので、後から選んでも噛み合います。
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>前提とする環境</th><th>フレームワーク</th><th>実行基盤</th><th>ひとこと</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>AWS中心</td><td>Strands Agents、またはLangGraph</td><td>Bedrock AgentCore</td><td>ポリシーをCedarでコードの外から強制できる</td></tr>
+            <tr><td>Azure、M365、.NET</td><td>Microsoft Agent Framework 1.x</td><td>Foundry Agent Service</td><td>Entra IDでの統制が前提の大企業向け</td></tr>
+            <tr><td>GCP、Gemini</td><td>Google ADK 1.x</td><td>Agent Engine</td><td>A2Aとの相性がよく、Javaでも書ける</td></tr>
+            <tr><td>クラウド中立、承認や長時間処理が多い</td><td>LangGraph 1.x</td><td>Kubernetes＋Temporal</td><td>ロックインは最小だが、運用責任はこちらに寄る</td></tr>
+            <tr><td>閉域、データ持ち出し不可</td><td>LangGraph、Agent Framework</td><td>閉域K8s＋サンドボックス</td><td>OWASPのAgentic Top 10で脅威分析を必須にする</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        もう一点、OpenAI系は変化が速い点に注意が要ります。Assistants APIは2026年8月26日に停止し、翌9月にはAgents APIが公開ベータで出ました。
+        APIの直接依存は、保守契約の上でリスクとして明示しておくのがよさそうです。
+        Semantic Kernelも保守モードに入っていて、既存案件は2027年中にAgent Frameworkへ移る計画が要ります。
+      </p>
+
+      <h2>見落としがちな評価機能の差</h2>
+      <p>
+        エージェントは同じ入力でも毎回違う手順をとります。最終回答だけでなく、途中のツール呼び出し（軌跡）まで評価できるかどうかが、本番品質を左右します。
+        調査では、公式の評価機能を9軸（出力評価、軌跡評価、決定論チェック、マルチターン、安全性、データセット管理、CI/CD連携、オンライン評価など）で見ました。
+        ここでは総合評価だけを抜き出します。
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>フレームワーク</th><th>総合</th><th>評価機能の中身</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Google ADK</td><td>A</td><td><code>adk eval</code> コマンドと評価セットを内蔵。軌跡、ルーブリック、安全性など複数の基準をしきい値つきで設定できる</td></tr>
+            <tr><td>Strands Agents</td><td>A</td><td>公式のEvals SDKで軌跡評価やユーザーシミュレーターまで揃う。本番のオンライン評価はAgentCore Evaluationsで行う</td></tr>
+            <tr><td>Mastra</td><td>A</td><td>スコアラーを直接付けられ、本番の応答をサンプリングして常時採点できる。TypeScript専用</td></tr>
+            <tr><td>LangGraph</td><td>A</td><td>軌跡の一致判定はOSSで可能。データセット管理や本番の評価は商用のLangSmith側</td></tr>
+            <tr><td>Microsoft Agent Framework</td><td>A</td><td>評価APIからFoundryの評価サービスを呼ぶ形で、エージェント向け評価器や安全性評価が揃う。多くはAzure前提</td></tr>
+            <tr><td>OpenAI Agents SDK</td><td>B</td><td>SDK単体に評価ライブラリはなく、OpenAIのプラットフォーム側で採点する</td></tr>
+            <tr><td>CrewAI</td><td>C</td><td><code>crewai test</code> でタスクごとの点数を出せる程度。本番では外部製品が前提</td></tr>
+            <tr><td>Vercel AI SDK、Claude Agent SDK</td><td>C</td><td>評価機能は持たず、トレースを外部の評価製品に送る前提</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        総合Cでも、Langfuseやクラウド純正の評価と組み合わせれば本番運用はできます。ただし評価基盤の構築を別に見積もっておかないと、後から効いてきます。
+        評価をクラウドの評価サービスに頼りきると評価データもそのクラウドに置くことになるので、データセットはJSONのような中立な形式でリポジトリに持っておくのが安全です。
+      </p>
+
+      <h2>まだ未成熟なところ</h2>
+      <p>
+        標準化が進んだ一方で、可観測性とセキュリティはまだ落ち着いていません。OpenTelemetryのGenAIセマンティック規約は、調査時点で全属性がDevelopment段階でした。
+        属性名が変わる前提で、トレースはOTel互換の製品で受けるのが現実的です。
+        ツール呼び出しの認可は、モデルに「守らせる」のではなく、ゲートウェイでエージェントのコードの外から決定論的に強制する。この考え方を設計の標準にすることを勧めます。
+        脅威分析のチェックリストには、2025年12月に公開されたOWASP Top 10 for Agentic Applications 2026が使えます。
+      </p>
+      <p>
+        ベータ段階のClaude Managed AgentsやOpenAI Agents APIは、SLAを前提にした本番には載せないほうが安全です。
+        国内事例を見ると、AWSのAgentCoreとLangGraph・Strandsの組み合わせ、およびAzureのFoundryの情報が最も厚く、人材も確保しやすい状況でした。
+        一方でMicrosoft Agent Frameworkを国内のSIerが採用したと明示した公式発表は、調べた範囲では見つかっていません。
+      </p>
+
+      <h2>この記事の限界</h2>
+      <p>
+        数値や日付の一部は、情報源によって差があります。A2AのAAIF移管日は8月17日から27日の間、Microsoft Agent FrameworkのGA日は4月2日か3日のどちらかで、確定できていません。
+        Strandsのダウンロード数やAG-UIの普及度のように、ベンダー自身が出した数字は独立に検証されていません。ベクトルDBの性能比較はベンチマーク条件で結論が逆転するので、採用前に自社データで測る必要があります。
+        評価機能の表も、2026年11月時点の公式ドキュメントに基づくため、採用時に再確認してください。
+      </p>
+
+      <h2>出典について</h2>
+      <p>
+        この記事は、2026年11月18日時点の公開情報を集めた調査メモに基づきます。主な出典は、Linux FoundationのAAIF発足発表、LangChainのLangGraph 1.0発表、
+        AWSのAgentCore Policy GA発表、Microsoft FoundryのAgent Service GA記事、各フレームワークの公式評価ドキュメント（LangSmith、Google ADK、Strands Evals SDK、Mastra、Pydantic Evals、CrewAI、OpenAI）、
+        OWASP Top 10 for Agentic Applications 2026の解説です。
+        執筆時に公開先へ接続できず、リンク先の実在と記載内容を確認できていないため、URLは載せていません。気になる項目は、上に挙げた名前で公式ドキュメントを探して確認してください。
+      </p>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
