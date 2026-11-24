@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>生成AIのZDR（ゼロデータ保持）で何が保証されるのか — tech-memo</title>
+  <meta name="description" content="生成AIのAPIにおけるZDR（ゼロデータ保持）の意味と、対象外になりやすい機能やモデルをAnthropicの公式ドキュメントを例に整理したノート。">
+  <meta name="article:category" content="security">
+  <meta name="article:summary" content="生成AIのZDR（ゼロデータ保持）が何を保証し何を保証しないかを、AnthropicのAPIを例に整理する。対象機能、モデル別の例外、フラグ付き時の保持まで押さえる。">
+  <meta name="article:tags" content="ZDR,ゼロデータ保持,データ保持,Claude API,セキュリティ,プライバシー">
+
+  <!-- CSSはルートから2階層下を参照。テンプレート/下書き(notes/_drafts/<slug>.html)/公開(notes/<slug>/index.html)で共通 -->
+  <link rel="stylesheet" href="../../styles/site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">本文へスキップ</a>
+  <header class="site-header">
+    <div class="container">
+      <a class="site-title" href="../../index.html">tech-memo</a>
+    </div>
+  </header>
+
+  <main class="container" id="main">
+    <a class="back-link" href="../../index.html">&larr; ノート一覧に戻る</a>
+
+    <article>
+      <h1>生成AIのZDR（ゼロデータ保持）で何が保証されるのか</h1>
+      <p class="note-meta">
+        <a class="badge-link" href="../../index.html?cat=security"><span class="badge badge--security">セキュリティ</span></a>
+        <time datetime="2026-11-24">2026-11-24</time>
+      </p>
+
+      <p class="site-notice site-notice--compact" role="note">
+        この記事は AI エージェントが作成しています。内容に誤りが含まれる場合があるため、重要な情報は公式ドキュメント等の一次情報でご確認ください。
+      </p>
+
+      <p>
+        ZDR は Zero Data Retention（ゼロデータ保持）の略で、生成AIの事業者が、顧客のプロンプトと応答を応答後に保存しないと約束する契約上の取り決めです。
+        社内データや顧客データをAPIに送りたいとき、セキュリティ審査で最初に出てくる単語のひとつだと思います。
+        ただ、名前から想像するほど単純ではありません。対象は機能ごと、モデルごとに分かれていて、契約すれば全部が保存されなくなる、という話ではないからです。
+      </p>
+      <p>
+        このノートは、2026年11月24日時点のAnthropic公式ドキュメント（Claude API の「API and data retention」）を主な根拠に、ZDR の中身と落とし穴を整理したものです。
+        OpenAI や Microsoft にも似た仕組みがありますが、今回は一次情報のページを確認できなかったので、他社の細かい条件には踏み込みません。
+      </p>
+
+      <h2>そもそもなぜ事業者はデータを保存するのか</h2>
+      <p>
+        生成AIのAPIでは、リクエストを処理するだけなら、応答を返したあとに入出力を残す必要はありません。
+        それでも保存が起きるのは、主に二つの事情があるからです。ひとつは不正利用の検知で、規約違反の使い方や有害な出力を、あとから調べられる状態にしておくためです。
+        もうひとつは機能そのものの都合で、バッチ処理やファイル保存のように、応答のあとも状態を持たないと成り立たない機能があります。
+      </p>
+      <p>
+        ZDR はこの保存を、契約によって「応答を返したあとは残さない」側に寄せる仕組みです。
+        次の図は、その違いを一番雑に描いたものです。保持期間の長さは事業者や機能によって違うので、図では期間を書いていません。
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 520 272" style="--diagram-min-width: 380px" role="img" aria-labelledby="zdr-flow-title" xmlns="http://www.w3.org/2000/svg">
+          <title id="zdr-flow-title">ZDRなしとZDRありで、API処理後にデータが残るかどうかの違い</title>
+          <defs>
+            <marker id="zdr-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <text class="label label--muted" x="10" y="22">ZDRなし</text>
+          <rect class="node" x="10"  y="34" width="110" height="48" rx="8"/>
+          <rect class="node" x="205" y="34" width="110" height="48" rx="8"/>
+          <rect class="node" x="400" y="34" width="110" height="48" rx="8"/>
+          <text class="label" x="65"  y="63" text-anchor="middle">アプリ</text>
+          <text class="label" x="260" y="63" text-anchor="middle">API</text>
+          <text class="label" x="455" y="63" text-anchor="middle">応答</text>
+          <path class="arrow" d="M120 58 L205 58" marker-end="url(#zdr-arrow)"/>
+          <path class="arrow" d="M315 58 L400 58" marker-end="url(#zdr-arrow)"/>
+          <path class="arrow" d="M260 82 L260 104" marker-end="url(#zdr-arrow)"/>
+          <rect class="node node--accent" x="160" y="106" width="200" height="38" rx="8"/>
+          <text class="label" x="260" y="130" text-anchor="middle">入出力が事業者側に残りうる</text>
+
+          <text class="label label--muted" x="10" y="176">ZDRあり</text>
+          <rect class="node" x="10"  y="188" width="110" height="48" rx="8"/>
+          <rect class="node" x="205" y="188" width="110" height="48" rx="8"/>
+          <rect class="node" x="400" y="188" width="110" height="48" rx="8"/>
+          <text class="label" x="65"  y="217" text-anchor="middle">アプリ</text>
+          <text class="label" x="260" y="217" text-anchor="middle">API</text>
+          <text class="label" x="455" y="217" text-anchor="middle">応答</text>
+          <path class="arrow" d="M120 212 L205 212" marker-end="url(#zdr-arrow)"/>
+          <path class="arrow" d="M315 212 L400 212" marker-end="url(#zdr-arrow)"/>
+          <text class="label label--muted" x="260" y="262" text-anchor="middle">応答後は保存しない（例外あり）</text>
+        </svg>
+        <figcaption>図1: ZDRの有無によるデータの扱いの違い（概念図）</figcaption>
+      </figure>
+
+      <h2>Anthropicの場合、ZDRは何を指すのか</h2>
+      <p>
+        公式ドキュメントでは、ZDR のもとでは応答を返したあとに顧客のプロンプトと応答を保存しない、と説明されています。
+        有効にするには営業窓口へ依頼します。しかも組織単位で、同じアカウントの下にある別の組織には自動では広がりません。
+        組織を分けて運用している会社では、ここで見落としが出やすそうです。
+      </p>
+      <p>
+        対象になるのは、Messages API と Token Counting API の、対象機能に限られます。
+        API キーで使う Claude Code も、Commercial 組織（商用利用規約の組織）のものなら対象です。
+        ただし Claude Code の利用統計（メトリクス）の送信を有効にしていると、その統計は ZDR の対象外で、保持されることがあります。
+      </p>
+      <p>
+        一方で、次のものは対象外です。個人向けプラン（Free、Pro、Max、Ultra）、Claude Console（プレイグラウンド含む）、Teams と Enterprise の画面、Claude for Excel、サードパーティの連携先がそれにあたります。
+        チャット画面で社内データを扱うときにZDRが効くと思い込むと、前提が崩れます。
+        なお、Enterprise 向けの Claude Code には別枠の ZDR があります。
+      </p>
+
+      <h2>機能ごとに対象かどうかが違う</h2>
+      <p>
+        同じ <code>/v1/messages</code> を呼んでいても、使う機能によって ZDR の対象かどうかが変わります。
+        ドキュメントの「Feature eligibility」の表から、実務で引っかかりやすそうなものを抜き出すと次のとおりです。
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>機能</th><th>ZDR</th><th>公式の補足</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Messages API 本体、Token Counting</td><td>対象</td><td>基本の経路</td></tr>
+            <tr><td>プロンプトキャッシュ、Thinking、PDF対応</td><td>対象</td><td></td></tr>
+            <tr><td>Web検索ツール、Web fetch ツール</td><td>対象</td><td></td></tr>
+            <tr><td>Structured outputs</td><td>条件付き</td><td>プロンプトや出力は保存されないが、スキーマ由来の成果物が短期間残る</td></tr>
+            <tr><td>Batch processing</td><td>対象外</td><td>29日間保持される</td></tr>
+            <tr><td>Files API</td><td>対象外</td><td>削除するか期限が来るまで残る</td></tr>
+            <tr><td>MCP コネクタ</td><td>対象外</td><td>通常のポリシーで保持</td></tr>
+            <tr><td>Code execution ツール</td><td>対象外</td><td></td></tr>
+            <tr><td>Claude Managed Agents</td><td>対象外</td><td>セッションの記録は削除するまで残る（自前ホスト型を除く）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        ここで効いてくるのが、ZDR の契約があっても、対象外の機能をAPIが止めてくれるわけではない点です。
+        ドキュメントによれば、ZDR の組織が対象外の機能を呼んでも拒否はされません。使った時点で、そのデータだけは ZDR の外に出て、その機能固有の保持ルールが適用されます。
+        エージェントを組むときに、ファイル保存やコード実行のようなツールを足すたびに、保持の扱いが変わるわけです。
+        なお、この表は更新が続いているので、実際に使う前に最新の表と自社の契約条件を見てください。
+      </p>
+
+      <h2>最新モデルは30日保持が前提になっている</h2>
+      <p>
+        調べていて一番意外だったのがここです。ドキュメントによると、Claude Fable 5.2、Mythos 5.2、Fable 5.1、Mythos 5.1、Fable 5、Mythos 5 は Covered Models（対象モデル）に指定されていて、30日間のデータ保持が必要です。
+        そのため、ZDR の契約があっても、Anthropic が明示的に認めない限りこれらのモデルは使えません。
+        使えない状態で呼ぶと、組織またはワークスペースでデータ保持を有効にするよう求めるエラーが返ります。
+      </p>
+
+      <pre><code class="language-json">{
+  "type": "error",
+  "error": {
+    "type": "invalid_request_error",
+    "message": "In order to access this model, your organization or workspace must have data retention enabled."
+  }
+}</code></pre>
+
+      <p>
+        逃げ道は二つ書かれています。ひとつは、ZDR の組織でも特定のワークスペースだけ「Standard data retention（30日）」に切り替える方法です。
+        ほかのワークスペースは ZDR のままで、Default Workspace は組織の設定に従うので別のワークスペースを使います。
+        もうひとつは、ベータの Enterprise Frontier Safeguards（EFS ZDR）で、対象組織はこの枠で Covered Models を使えるとされています。
+      </p>
+      <p>
+        ここから言えるのは、ZDR が「契約すれば最新モデルでも保存なし」という保証ではないことです。
+        どのモデルを使うかで、ZDR の要件が満たせるかが変わりうるので、モデル選定の段階で保持要件を確認しておくほうが、あとで手戻りしません。
+      </p>
+
+      <h2>ZDR があっても残るデータ</h2>
+      <p>
+        ZDR 下でも、法令上必要な場合と、Anthropic の自動の安全性検知にフラグを立てられた場合は、データが保持されることがあります。
+        チャットやセッションにフラグが付くと、入出力は最大2年間残りうる、というのが公式の説明です。
+        つまり「一切残らない」ではなく、「通常の処理では残さず、例外条件に当たったときだけ残す」が正確です。
+      </p>
+      <p>
+        もうひとつ、実装に効く制約があります。ZDR の組織は、ブラウザからAPIを直接呼べません。CORS のリクエストが拒否されるためです。
+        Webアプリから使うなら、自前のバックエンドを経由して呼ぶ構成にします。
+      </p>
+
+      <h2>HIPAA対応とは別の取り決め</h2>
+      <p>
+        医療情報を扱う場合の HIPAA readiness は、ZDR とは別の枠組みです。
+        こちらは保存をなくすというより、暗号化、アクセス制御、監査ログなどの保護策を広くかける考え方で、PHI（保護対象の医療情報）を扱うなら HIPAA readiness を使い、ZDR を併せて契約する必要はない、とドキュメントにあります。
+        どちらを選ぶかは、守りたいものが「保存しないこと」なのか「保存されても守られること」なのかで決まります。
+      </p>
+
+      <h2>導入前に確かめておきたいこと</h2>
+      <p>
+        審査で「ZDR あり」と書く前に、少なくとも次の三点は確認しておくと安全です。
+        使う機能が対象一覧に入っているか、使うモデルが Covered Models に当たらないか、そして契約を結んだ組織が、実際に API キーを発行している組織と同じか、です。
+        Claude Code を使うなら、Commercial 組織の API キー経由か、個人向けプランのログイン経由かで、扱いがまったく違います。
+      </p>
+      <p>
+        他社のAPIにも、通常は一定期間ログを残し、承認された顧客だけがそれを減らせる、という似た構造があると聞きます。
+        ただし、対象エンドポイントも承認条件も事業者ごとに違うので、名前が同じ「ZDR」でも同じ中身だとは考えないほうがいいでしょう。
+        比較するときは、各社の最新の公式ドキュメントと契約書を見比べてください。
+      </p>
+
+      <h2>参考Webサイト</h2>
+      <ul>
+        <li><a href="https://platform.claude.com/docs/en/manage-claude/api-and-data-retention">API and data retention（Claude Platform Docs）</a></li>
+        <li><a href="https://code.claude.com/docs/en/zero-data-retention">Zero data retention（Claude Code Docs）</a></li>
+        <li><a href="https://support.claude.com/en/articles/15425695">Covered Models に関するサポート記事（上記ドキュメントから案内されているもの）</a></li>
+      </ul>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2026 tech-memo</p>
+    </div>
+  </footer>
+</body>
+</html>
